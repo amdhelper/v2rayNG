@@ -25,6 +25,16 @@ Download the latest release here:
 >
 > https://github.com/2dust/v2rayN
 
+> [!IMPORTANT]
+> **HarmonyOS NEXT port / 纯血鸿蒙版**: this fork additionally contains a native
+> HarmonyOS NEXT port in [`V2rayNG-Ohos/`](./V2rayNG-Ohos). HarmonyOS NEXT has no
+> Android runtime, so this is a re-implementation on HarmonyOS capabilities
+> (ArkTS + ArkUI + NAPI + native cores), not a repackaged APK.
+> Build: [`V2rayNG-Ohos/README.md`](./V2rayNG-Ohos/README.md) ·
+> Design notes, TLS constraints and known gaps:
+> [`V2rayNG-Ohos/docs/OHOS_PORT.md`](./V2rayNG-Ohos/docs/OHOS_PORT.md).
+> The Android project under `V2rayNG/` is untouched.
+
 ---
 
 ### Geoip and Geosite

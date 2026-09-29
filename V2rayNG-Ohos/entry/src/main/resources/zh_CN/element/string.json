@@ -1,0 +1,9 @@
+{
+  "string": [
+    { "name": "module_desc", "value": "v2rayNG 鸿蒙原生版" },
+    { "name": "EntryAbility_desc", "value": "v2rayNG" },
+    { "name": "EntryAbility_label", "value": "v2rayNG" },
+    { "name": "VpnAbility_desc", "value": "v2rayNG VPN 扩展" },
+    { "name": "VpnAbility_label", "value": "v2rayNG VPN" }
+  ]
+}

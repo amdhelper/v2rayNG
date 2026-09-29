@@ -1,0 +1,4 @@
+# Keep NAPI bridge + native-facing entry points intact.
+-enable-property-obfuscation
+-keep-global-name
+-keep-file-name

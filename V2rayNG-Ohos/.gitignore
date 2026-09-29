@@ -1,0 +1,19 @@
+/node_modules
+/oh_modules
+/local.properties
+/.idea
+**/build
+/.hvigor
+/.cxx
+/.clangd
+**/.test
+/entry/libs
+
+# Native artifacts and the OHOS Go toolchain MUST live outside the repo:
+# `hvigor clean` deletes <repo>/build, which once wiped a whole toolchain.
+/native-out
+/entry/src/main/cpp/prebuilt
+
+# 27 MB of geo data copied in from the AndroidLibXrayLite submodule at build
+# time by scripts/sync_geo_assets.sh
+/entry/src/main/resources/rawfile/*.dat

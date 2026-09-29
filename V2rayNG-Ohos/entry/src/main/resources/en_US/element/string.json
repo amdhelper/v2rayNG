@@ -1,0 +1,9 @@
+{
+  "string": [
+    { "name": "module_desc", "value": "v2rayNG for HarmonyOS NEXT" },
+    { "name": "EntryAbility_desc", "value": "v2rayNG" },
+    { "name": "EntryAbility_label", "value": "v2rayNG" },
+    { "name": "VpnAbility_desc", "value": "v2rayNG VPN extension" },
+    { "name": "VpnAbility_label", "value": "v2rayNG VPN" }
+  ]
+}

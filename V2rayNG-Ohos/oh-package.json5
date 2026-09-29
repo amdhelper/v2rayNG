@@ -1,0 +1,11 @@
+{
+  "modelVersion": "6.1.1",
+  "name": "v2rayng-ohos",
+  "version": "1.0.0",
+  "description": "v2rayNG for HarmonyOS NEXT (pure HarmonyOS port of 2dust/v2rayNG)",
+  "license": "GPL-3.0",
+  "dependencies": {},
+  "devDependencies": {
+    "@ohos/hypium": "1.0.19"
+  }
+}

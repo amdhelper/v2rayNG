@@ -1,0 +1,7 @@
+{
+  "color": [
+    { "name": "start_window_background", "value": "#FF101418" },
+    { "name": "app_bg", "value": "#FF101418" },
+    { "name": "card_bg", "value": "#FF1B2026" }
+  ]
+}
