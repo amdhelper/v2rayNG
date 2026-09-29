@@ -5,9 +5,11 @@
 **/build
 /.hvigor
 /.cxx
+**/.cxx
 /.clangd
 **/.test
 /entry/libs
+/entry/oh_modules
 
 # Native artifacts and the OHOS Go toolchain MUST live outside the repo:
 # `hvigor clean` deletes <repo>/build, which once wiped a whole toolchain.
