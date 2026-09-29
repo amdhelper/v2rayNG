@@ -44,6 +44,7 @@ export { XrayConfigBuilder } from './ets/core/XrayConfigBuilder';
 export { HevTunConfig } from './ets/core/HevTunConfig';
 export { settings } from './ets/model/AppSettings';
 export { ProfileItem, EConfigType } from './ets/model/Profile';
+export { AppResolver, BundleCheck, BundleState } from './ets/core/AppResolver';
 export { logRing } from './ets/util/Log';
 `);
 
@@ -56,7 +57,8 @@ const ohosShimPlugin = {
         '@ohos.buffer': shim('ohos.buffer.mjs'),
         '@ohos.hilog': shim('ohos.hilog.mjs'),
         '@ohos.data.preferences': shim('ohos.preferences.mjs'),
-        '@ohos.app.ability.common': shim('ohos.common.mjs')
+        '@ohos.app.ability.common': shim('ohos.common.mjs'),
+        '@ohos.bundle.bundleManager': shim('ohos.bundle.bundleManager.mjs')
       };
       const hit = map[args.path];
       if (!hit) return { errors: [{ text: `logic_check: no shim for ${args.path}` }] };

@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, 'out');
 const FRAGMENTS = join(HERE, 'out-fragments');
-const { Fmt, XrayConfigBuilder, settings, ProfileItem, EConfigType, logRing } =
+const { Fmt, XrayConfigBuilder, settings, ProfileItem, EConfigType, logRing, AppResolver } =
   await import('./dist/harness.mjs');
 
 let failures = 0;
@@ -327,6 +327,19 @@ const kcp = parsed.find((p) => p.name === '13-vless-kcp-seed').profile;
 const kcpCfg = JSON.parse(XrayConfigBuilder.buildFor(kcp, false));
 kcpCfg.outbounds[0].streamSettings.kcpSettings = { mtu: 1350, tti: 20, seed: 'myseed' };
 emit('93-upstream-mkcp-seed.json', JSON.stringify(kcpCfg));
+
+// The per-app proxy list is split in two places — the settings page (which
+// verifies each name) and ConnectionController (which puts them into the VpnConfig).
+// If they split differently, the page reports "N verified" while the tunnel
+// silently receives ONE mangled name. One shared splitter, asserted here.
+eq('splitNames: comma', AppResolver.splitNames('a.b,c.d'), ['a.b', 'c.d']);
+eq('splitNames: space (the divergence that would otherwise be silent)',
+  AppResolver.splitNames('a.b c.d'), ['a.b', 'c.d']);
+eq('splitNames: semicolon and CJK punctuation', AppResolver.splitNames('a.b；c.d;e.f'), ['a.b', 'c.d', 'e.f']);
+eq('splitNames: newline and tab', AppResolver.splitNames('a.b\nc.d\te.f'), ['a.b', 'c.d', 'e.f']);
+eq('splitNames: empties dropped', AppResolver.splitNames('a.b,,c.d,'), ['a.b', 'c.d']);
+eq('splitNames: duplicates collapsed, order kept', AppResolver.splitNames('b.b,a.a,b.b'), ['b.b', 'a.a']);
+eq('splitNames: empty input', AppResolver.splitNames('   '), []);
 
 expectedFailures['90-upstream-h2.json'] = 'HTTP transport';
 expectedFailures['91-upstream-allowinsecure.json'] = 'allowInsecure';

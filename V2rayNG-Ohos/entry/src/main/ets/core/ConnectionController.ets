@@ -12,6 +12,7 @@ import { ProfileItem, EConfigType } from '../model/Profile';
 import { profiles } from '../model/ProfileStore';
 import { getUiAbilityContext } from '../common/AppContext';
 import { measureDelayConcurrent } from './DelayTask';
+import { AppResolver } from './AppResolver';
 import { Log } from '../util/Log';
 
 /**
@@ -261,7 +262,11 @@ export class ConnectionController {
     const trusted: string[] = [];
 
     if (s.perAppProxyEnabled) {
-      const selected = ConnectionController.splitCsv(s.perAppProxySet);
+      // 必须用 AppResolver.splitNames，不能用下面那个只按逗号切的 splitCsv：
+      // 设置页是按逗号/分号/空白切分并逐个核验的，两边切法不一致时，用户
+      // 用空格分隔会看到"N 项核验通过"，而隧道只拿到一个拼在一起的包名并
+      // 静默忽略掉其余的应用——不报错，但代理范围是错的。
+      const selected = AppResolver.splitNames(s.perAppProxySet);
       if (selected.length > 0) {
         if (s.perAppProxyBypass) {
           for (const b of selected) {

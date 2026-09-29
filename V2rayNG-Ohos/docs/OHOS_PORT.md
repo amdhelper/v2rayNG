@@ -246,8 +246,12 @@ VPN 扩展进程调 cgo 不 SIGSEGV。
 本目录是**能编译、结构完整**的第一版基础，不是功能对齐版。相对 Android 版的差距：
 
 **路由/配置**
-- 只实现了 4 个路由预设中的 3 个（bypass-mainland / bypass-lan / all），
-  自定义 routing 规则集、ruleset 下载、balancer/策略组、observatory 未移植。
+- 路由预设里只有 `bypass-mainland` / `bypass-lan` 会生成内置直连规则
+  （`XrayConfigBuilder.routingRules()`）。`all` 与 `global` 都是"不加规则、全部走
+  第一个出站"，`custom` **没有规则编辑界面**、行为与 `global` 相同——设置页的
+  下拉标签已如实写成"全局代理（与第一项相同）"和"自定义规则（未实现，等同全局）"，
+  不让用户以为自定义规则生效了。自定义 routing 规则集、ruleset 下载、
+  balancer/策略组、observatory 未移植。
 - FakeDNS 只有基础形态；`browser_dialer`（浏览器拨号）未移植。
 - 自定义 JSON 配置（`EConfigType.CUSTOM`）**已支持连接**：
   `XrayConfigBuilder.buildCustom()` 把存的原始 JSON 原样使用，并按上游
@@ -274,6 +278,25 @@ VPN 扩展进程调 cgo 不 SIGSEGV。
 - 第三方 VPN 应用**上架华为应用市场需要华为审核 VPN 扩展能力**；
   本地自签只能自用/测试。
 - 桌面/太平等形态未做（`deviceTypes` 写了 phone/tablet/2in1，但 UI 按手机布局）。
+
+**分应用代理：选择器在鸿蒙上做不到，改用"填包名 + 逐个核验"**
+- 安卓版是列出全部已装应用让用户勾选。鸿蒙**没有这个 API**：
+  `@ohos.bundle.bundleManager.d.ts` 只有 `getBundleInfoForSelf()` 和按包名查的
+  `getBundleInfo()`，**不存在 `getAllBundleInfo()`**；枚举全部应用所需的
+  `GET_BUNDLE_INFO_PRIVILEGED` / `ENTERPRISE_GET_ALL_BUNDLE_INFO` 是
+  `system_basic` 级（`availableLevel` 查自 SDK 的 `PermissionDefinitions.json`），
+  第三方应用拿不到。这不是本移植偷懒，是平台限制。
+- 因此名单由用户填包名（逗号分隔），`core/AppResolver.ets` 用
+  `ohos.permission.GET_BUNDLE_INFO`（normal 级、system_grant，已写进 module.json5）
+  逐个核验并在设置页标注"已安装（版本 x.y.z）/ 未找到"。**这一步是必要的**：
+  `VpnConfig` 对不认识的包名只是静默忽略，不核验的话用户会以为名单生效了。
+- 名单切分只有**一个实现**（`AppResolver.splitNames`）：设置页用它核验、
+  `ConnectionController` 用它填 `VpnConfig`。曾经两边各切一套（一个按逗号，
+  一个按逗号/空格/分号）——用户用空格分隔就会"页面显示 2 项核验通过、隧道只收到
+  1 个拼在一起的包名并静默忽略"，门禁里有断言守着这个接缝。
+- 数据面是通的：名单 → `ConnectionController` → `VpnConfig.trustedApplications`
+  / `blockedApplications`（自身 bundleName 恒在 blocked 里，避免回环）。
+  作用时机是**建立隧道的瞬间**，所以改名单要重连才生效。
 
 **其他**
 - 订阅 URL 拉取用明文 http 客户端（与 Android 一致），未加计量/重试策略。

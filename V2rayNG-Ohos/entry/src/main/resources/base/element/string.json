@@ -4,6 +4,7 @@
     { "name": "EntryAbility_desc", "value": "v2rayNG" },
     { "name": "EntryAbility_label", "value": "v2rayNG" },
     { "name": "VpnAbility_desc", "value": "v2rayNG VPN extension" },
-    { "name": "VpnAbility_label", "value": "v2rayNG VPN" }
+    { "name": "VpnAbility_label", "value": "v2rayNG VPN" },
+    { "name": "bundle_info_reason", "value": "Verify that apps listed for per-app proxy are installed" }
   ]
 }

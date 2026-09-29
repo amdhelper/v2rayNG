@@ -7,6 +7,7 @@
  */
 import router from '@ohos.router';
 import { settings, AppSettingsData } from '../model/AppSettings';
+import { AppResolver, BundleCheck, BundleState } from '../core/AppResolver';
 import { Log } from '../util/Log';
 
 const C_BG: string = '#FF101418';
@@ -19,12 +20,18 @@ const C_WARN: string = '#FFF2B45C';
 
 /** 路由规则预设，与 AppSettingsData.routingPreset 的取值域一致。 */
 const ROUTING_PRESETS: string[] = ['all', 'bypass-mainland', 'bypass-lan', 'global', 'custom'];
+/**
+ * 标签必须如实反映实现了什么：只有 bypass-mainland / bypass-lan 会生成内置直连
+ * 规则（XrayConfigBuilder.routingRules()），'all' 与 'global' 都是"不加规则、
+ * 全部走第一个出站"，'custom' 没有规则编辑界面、行为与 global 相同。
+ * 别为了让下拉框好看而写成"自定义规则"，用户会以为规则真的生效了。
+ */
 const ROUTING_PRESET_LABELS: string[] = [
   '全部流量走代理',
   '大陆地址直连（绕过大陆）',
   '仅局域网直连',
-  '全局代理',
-  '自定义规则'
+  '全局代理（与第一项相同）',
+  '自定义规则（未实现，等同全局）'
 ];
 
 /** 与 AppSettingsData.logLevel 的取值域一致。 */
@@ -87,6 +94,9 @@ struct Settings {
   @State domainStrategy: string = 'IPIfNonMatch';
   @State perAppProxyEnabled: boolean = false;
   @State perAppProxyBypass: boolean = false;
+  @State perAppProxySet: string = '';
+  /** 名单里每个包名的核验结果，供下面逐行标注。 */
+  @State bundleChecks: BundleCheck[] = [];
   @State delayTestUrl: string = '';
   @State delayTestTimeoutMs: number = 8000;
   @State logLevel: string = 'warning';
@@ -111,6 +121,8 @@ struct Settings {
     this.domainStrategy = d.domainStrategy;
     this.perAppProxyEnabled = d.perAppProxyEnabled;
     this.perAppProxyBypass = d.perAppProxyBypass;
+    this.perAppProxySet = d.perAppProxySet;
+    this.refreshBundleChecks();
     this.delayTestUrl = d.delayTestUrl;
     this.delayTestTimeoutMs = d.delayTestTimeoutMs;
     this.logLevel = d.logLevel;
@@ -128,6 +140,44 @@ struct Settings {
     } catch (e) {
       Log.w('Settings.toast failed: ' + JSON.stringify(e));
     }
+  }
+
+  /**
+   * 核验名单里的包名。鸿蒙不能枚举应用，只能按名查（见 core/AppResolver.ets），
+   * 所以这里的结果是用户唯一的反馈：名单写了但核验失败，隧道会静默忽略。
+   */
+  private refreshBundleChecks(): void {
+    AppResolver.checkAll(this.perAppProxySet).then((checks: BundleCheck[]) => {
+      this.bundleChecks = checks;
+    }).catch((e: Object) => {
+      Log.w('Settings.refreshBundleChecks failed: ' + JSON.stringify(e));
+    });
+  }
+
+  private bundleSymbol(state: BundleState): string {
+    if (state === BundleState.FOUND) {
+      return '\u2713';
+    }
+    if (state === BundleState.NOT_FOUND) {
+      return '\u2717';
+    }
+    if (state === BundleState.NO_PERMISSION) {
+      return '!';
+    }
+    return '\u00b7';
+  }
+
+  private bundleColor(state: BundleState): string {
+    if (state === BundleState.FOUND) {
+      return C_ACCENT;
+    }
+    if (state === BundleState.NOT_FOUND) {
+      return C_WARN;
+    }
+    if (state === BundleState.NO_PERMISSION) {
+      return C_WARN;
+    }
+    return C_TEXT2;
   }
 
   /** 数字输入统一走这里：解析失败时保留原值并提示，不写坏数据。 */
@@ -201,6 +251,31 @@ struct Settings {
     }
     .width('100%')
     .padding({ top: 8, bottom: 8 })
+  }
+
+  @Builder
+  BundleRow(check: BundleCheck) {
+    Row() {
+      Text(this.bundleSymbol(check.state))
+        .fontSize(14)
+        .fontColor(this.bundleColor(check.state))
+        .width(18)
+      Column() {
+        Text(check.bundleName)
+          .fontSize(13)
+          .fontColor(C_TEXT)
+          .width('100%')
+        Text(AppResolver.describe(check))
+          .fontSize(11)
+          .fontColor(C_TEXT2)
+          .width('100%')
+          .margin({ top: 2 })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+    }
+    .width('100%')
+    .padding({ top: 5, bottom: 5 })
   }
 
   @Builder
@@ -417,9 +492,40 @@ struct Settings {
             d.perAppProxyBypass = v;
           });
         })
-        Text('提示：应用选择器尚未实现，开关会保存但暂不生效。')
+        this.TextRow('应用名单（包名，逗号分隔）', this.perAppProxySet,
+          'com.example.app, com.example.two', (v: string) => {
+            this.perAppProxySet = v;
+            this.commit((d: AppSettingsData) => {
+              d.perAppProxySet = v;
+            });
+          })
+
+        Row() {
+          Button('核验名单')
+            .fontSize(13)
+            .backgroundColor(C_FIELD)
+            .fontColor(C_ACCENT)
+            .onClick(() => {
+              this.refreshBundleChecks();
+            })
+          Text(`${this.bundleChecks.length} 项`)
+            .fontSize(12)
+            .fontColor(C_TEXT2)
+            .margin({ left: 10 })
+        }
+        .width('100%')
+        .margin({ bottom: 6 })
+
+        ForEach(this.bundleChecks, (check: BundleCheck) => {
+          this.BundleRow(check)
+        }, (check: BundleCheck) => check.bundleName + '-' + check.state)
+
+        Text('鸿蒙不允许普通应用枚举已安装应用（bundleManager 只有按包名查询，'
+          + '没有 getAllBundleInfo），所以安卓版那种“勾选应用”的选择器在这里做不到：'
+          + '只能填包名。包名可在“设置 → 应用 → 应用详情”或用 '
+          + 'hdc shell bm dump -a 查到。名单在下次连接时生效，未核验通过的包名会被隧道忽略。')
           .fontSize(12)
-          .fontColor(C_WARN)
+          .fontColor(C_TEXT2)
           .width('100%')
           .margin({ top: 4, bottom: 8 })
 
