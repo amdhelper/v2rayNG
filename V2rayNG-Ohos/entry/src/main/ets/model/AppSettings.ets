@@ -74,15 +74,39 @@ class Store {
     return this.data;
   }
 
+  /**
+   * Field-by-field merge of a persisted snapshot onto freshly-defaulted data,
+   * so a settings file written by an older build still loads. Written out
+   * explicitly because ArkTS forbids dynamic property access.
+   */
   private static merge(base: AppSettingsData, over: AppSettingsData): AppSettingsData {
     const out = base;
-    for (const k of Object.keys(over)) {
-      const v = (over as Record<string, ESObject>)[k];
-      if (v === undefined || v === null) {
-        continue;
-      }
-      (out as Record<string, ESObject>)[k] = v;
-    }
+    if (over.vpnMode !== undefined) { out.vpnMode = over.vpnMode; }
+    if (over.localProxyEnabled !== undefined) { out.localProxyEnabled = over.localProxyEnabled; }
+    if (over.socksPort !== undefined) { out.socksPort = over.socksPort; }
+    if (over.httpPort !== undefined) { out.httpPort = over.httpPort; }
+    if (over.socksUsername !== undefined) { out.socksUsername = over.socksUsername; }
+    if (over.socksPassword !== undefined) { out.socksPassword = over.socksPassword; }
+    if (over.vpnMtu !== undefined) { out.vpnMtu = over.vpnMtu; }
+    if (over.ipv6Enabled !== undefined) { out.ipv6Enabled = over.ipv6Enabled; }
+    if (over.bypassLan !== undefined) { out.bypassLan = over.bypassLan; }
+    if (over.appendHttpProxy !== undefined) { out.appendHttpProxy = over.appendHttpProxy; }
+    if (over.vpnDnsServers !== undefined) { out.vpnDnsServers = over.vpnDnsServers; }
+    if (over.remoteDns !== undefined) { out.remoteDns = over.remoteDns; }
+    if (over.localDnsEnabled !== undefined) { out.localDnsEnabled = over.localDnsEnabled; }
+    if (over.fakeDnsEnabled !== undefined) { out.fakeDnsEnabled = over.fakeDnsEnabled; }
+    if (over.sniffingEnabled !== undefined) { out.sniffingEnabled = over.sniffingEnabled; }
+    if (over.routingEnabled !== undefined) { out.routingEnabled = over.routingEnabled; }
+    if (over.domainStrategy !== undefined) { out.domainStrategy = over.domainStrategy; }
+    if (over.routingPreset !== undefined) { out.routingPreset = over.routingPreset; }
+    if (over.perAppProxyEnabled !== undefined) { out.perAppProxyEnabled = over.perAppProxyEnabled; }
+    if (over.perAppProxyBypass !== undefined) { out.perAppProxyBypass = over.perAppProxyBypass; }
+    if (over.perAppProxySet !== undefined) { out.perAppProxySet = over.perAppProxySet; }
+    if (over.delayTestUrl !== undefined) { out.delayTestUrl = over.delayTestUrl; }
+    if (over.delayTestTimeoutMs !== undefined) { out.delayTestTimeoutMs = over.delayTestTimeoutMs; }
+    if (over.logLevel !== undefined) { out.logLevel = over.logLevel; }
+    if (over.xuKey !== undefined) { out.xuKey = over.xuKey; }
+    if (over.currentProfileGuid !== undefined) { out.currentProfileGuid = over.currentProfileGuid; }
     return out;
   }
 

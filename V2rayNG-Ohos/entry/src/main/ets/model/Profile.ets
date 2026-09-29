@@ -62,6 +62,9 @@ export class NetworkType {
   static readonly HTTPUPGRADE = 'httpupgrade';
   static readonly SPLITHTP = 'splithttp';
   static readonly XHTTP = 'xhttp';
+  static readonly H2 = 'h2';
+  /** Hysteria2's transport marker; mirrors the Android NetworkType.HYSTERIA. */
+  static readonly HYSTERIA = 'hysteria';
 }
 
 /** Security values used by `ProfileItem.security`. */

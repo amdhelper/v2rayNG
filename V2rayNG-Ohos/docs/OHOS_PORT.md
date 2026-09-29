@@ -231,8 +231,8 @@ VPN 扩展进程调 cgo 不 SIGSEGV。
 
 **平台能力**
 - `protectProcessNet()` 需要 **API ≥ 22**。低于该版本时无法保护内核自己的
-  服务端 socket，默认路由会形成回环；代码会打警告并继续。旧版本设备建议
-  改用局域网绕过模式（bypassLan）。
+  服务端 socket，而路由表等价于默认路由，会形成回环；代码会打警告并继续，
+  旧系统上 VPN 模式实际上不可用（见 §6.9）。
 - 第三方 VPN 应用**上架华为应用市场需要华为审核 VPN 扩展能力**；
   本地自签只能自用/测试。
 - 桌面/太平等形态未做（`deviceTypes` 写了 phone/tablet/2in1，但 UI 按手机布局）。
@@ -244,7 +244,61 @@ VPN 扩展进程调 cgo 不 SIGSEGV。
 
 ---
 
-## 6. 参考实现
+## 6. 把 Android 工程搬进 ArkTS 时必踩的坑（本仓库实测）
+
+这几条都是"编译过了才敢说"的硬经验，改写 Kotlin/Java 逻辑时逐条对照：
+
+1. **以本机安装的 `.d.ts` 为准，不要信在线文档。** 在线文档里
+   `vpnExtension.VpnConfig.addresses` 是 `Array<LinkAddress>` 且
+   `LinkAddress = {address: string, prefixLength: number}`；而 6.1.1(24)
+   实际安装的 `@ohos.net.connection.d.ts` 已经改成
+   `LinkAddress = { address: NetAddress, prefixLength: number }`、
+   `RouteInfo.gateway = NetAddress`，`NetAddress = {address, family?, port?}`。
+   照在线文档写会得到一串 `Type 'string' is not assignable to type 'NetAddress'`。
+   核对位置：`<SDK>/default/openharmony/ets/api/@ohos.net.connection.d.ts`。
+
+2. **ArkTS 禁止按索引访问字段**（`arkts-no-props-by-index`）。
+   `headers['User-Agent']`、`levels['0']` 这类写法过不了。
+   xray 配置里天生带这种 JSON（`tcpSettings.header.request.headers`、
+   `policy.levels`），官方 Kotlin 侧也是"先写 JSON 字面量再 parse"，
+   **照它的做法用 `JSON.parse(literal) as X`** 即可，比自造结构安全。
+   注意：带引号的非标识符字段名可以声明（`'User-Agent'?: string[]`），
+   但不能用索引访问，只能用点号访问合法的那个（`headers.Host`）。
+
+3. **禁止 `ESObject` / `any` / `unknown`**（`arkts-no-any-unknown`）。
+   我第一版用 `conn as ESObject` 绕过高版本 API，直接报错。
+   正确做法：**本地声明一个只含目标方法的小接口**（nominal 检查能过），
+   再 `this.conn as Object as ThatInterface`，配 `typeof === 'function'` 判存在。
+   这样 compatibleSdkVersion 能留在 5.0.0(12)。
+
+4. **`@Builder` 里不要写 `this.参数名`**。`@Builder` 的参数是**裸参数**，
+   `this.x` 只会去找 struct 的成员，于是报
+   `Property 'x' does not exist on type '<Struct>'`（一次能报 20 条）。
+   批量修法：定位 `@Builder` → 括号平衡取出形参名 → 在方法体内把
+   `this.<形参>` 换成 `<形参>`。
+
+5. **`Select` 没有 `fontSize()`**，字号要写 `.font({ size: 15 })`。
+
+6. **`buffer.from(s,'utf-8')` 返回 `buffer.Buffer`**，不是 `Uint8Array`；
+   显式标注成 `Uint8Array` 会报缺 15+ 个成员。用 `buffer.Buffer` 标类型。
+
+7. **不要把"LAN 要绕过"写成"只路由 LAN"**。Android 的
+   `AppConfig.ROUTED_IP_LIST` 是**私网段的补集**（0.0.0.0/5、8.0.0.0/7 … 240.0.0.0/4，
+   共 31 条），语义是"除私网外全部进隧道"，等价于默认路由。
+   写反了会出现"VPN 连上了但只有局域网流量走代理"。
+   本仓库的 `ROUTED_IP_LIST` 是从 `AppConfig.kt` 逐条抄的。
+
+8. **`VpnExtensionAbility` 是独立进程**。两边只能靠 `filesDir` 下的文件通信
+   （请求/状态/日志三个文件），不要指望跨进程 `@ohos.data.preferences`；
+   也别用 Want 传大 payload。
+
+9. **`protectProcessNet()` 是 API ≥ 22**。没有它，内核自己连服务端的 socket
+   会被上面那张"等于默认路由"的路由表回灌进隧道 → 死循环。
+   代码里会打警告并继续；旧系统上 VPN 模式实际上不可用。
+
+---
+
+## 7. 参考实现
 
 同类鸿蒙原生移植的公开实现，本移植在原生层与它们的技术路线一致（musl/TLSDESC
 那条结论是共通的），遇到问题时值得对照：

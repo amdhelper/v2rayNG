@@ -2,6 +2,7 @@ import UIAbility from '@ohos.app.ability.UIAbility';
 import AbilityConstant from '@ohos.app.ability.AbilityConstant';
 import Want from '@ohos.app.ability.Want';
 import window from '@ohos.window';
+import fs from '@ohos.file.fs';
 import { BusinessError } from '@ohos.base';
 import { setUiAbilityContext } from '../common/AppContext';
 import { settings } from '../model/AppSettings';
@@ -33,7 +34,7 @@ export default class EntryAbility extends UIAbility {
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
-    CoreNative.setNativeLibDir(this.context.bundleCodeDir + '/libs/arm64');
+    CoreNative.setNativeLibDir(EntryAbility.resolveNativeLibDir(this.context.bundleCodeDir));
     windowStage.loadContent('pages/Index', (err: BusinessError) => {
       if (err.code) {
         Log.e('EntryAbility: loadContent failed ' + JSON.stringify(err));
@@ -59,6 +60,28 @@ export default class EntryAbility extends UIAbility {
 
   onBackground(): void {
     Log.i('EntryAbility: onBackground');
+  }
+
+  /**
+   * The HAP stores native libraries under `libs/arm64-v8a/`, while the
+   * extracted bundle on device uses `libs/arm64`. Probing both means the
+   * bridge can dlopen by absolute path; when neither exists it falls back to a
+   * bare-soname lookup, which normally resolves through the app's own native
+   * library search path anyway.
+   */
+  private static resolveNativeLibDir(bundleCodeDir: string): string {
+    const candidates: string[] = ['/libs/arm64', '/libs/arm64-v8a'];
+    for (const suffix of candidates) {
+      const dir = bundleCodeDir + suffix;
+      try {
+        if (fs.accessSync(dir)) {
+          return dir;
+        }
+      } catch (e) {
+        // keep probing
+      }
+    }
+    return bundleCodeDir + '/libs/arm64';
   }
 
   private async bootstrap(): Promise<void> {

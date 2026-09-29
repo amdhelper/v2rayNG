@@ -109,7 +109,7 @@ export class ConnectionController {
       return false;
     }
 
-    const guid = profiles.selectedGuid;
+    const guid = profiles.selectedGuid();
     const profile: ProfileItem | null = guid.length > 0 ? profiles.get(guid) : null;
     if (profile === null) {
       Log.e('ConnectionController.start: no server selected');

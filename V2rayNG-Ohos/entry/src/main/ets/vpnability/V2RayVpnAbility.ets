@@ -32,16 +32,73 @@ const STATE_STARTING = 1;
 const STATE_CONNECTED = 2;
 const STATE_ERROR = 3;
 
-/** LAN ranges mirrored from AppConfig.ROUTED_IP_LIST in the Android build. */
-const LAN_ROUTES: string[] = [
-  '10.0.0.0/8',
-  '172.16.0.0/12',
-  '192.168.0.0/16',
-  '169.254.0.0/16',
-  '127.0.0.0/8',
-  '224.0.0.0/4',
-  '255.255.255.255/32'
+/**
+ * AppConfig.ROUTED_IP_LIST, copied verbatim from the Android build.
+ *
+ * Note the direction of the trick: this list is the *complement* of the
+ * private/LAN ranges, so it captures essentially all IPv4 traffic while
+ * leaving 10/8, 127/8, 172.16/12, 192.168/16, 169.254/16 and 224/4 outside the
+ * tunnel — that is what `bypassLan` means. Together with the two /1 halves it
+ * behaves as a default route, which is exactly why protectProcessNet() below
+ * is mandatory.
+ */
+const ROUTED_IP_LIST: string[] = [
+  '0.0.0.0/5',
+  '8.0.0.0/7',
+  '11.0.0.0/8',
+  '12.0.0.0/6',
+  '16.0.0.0/4',
+  '32.0.0.0/3',
+  '64.0.0.0/2',
+  '128.0.0.0/3',
+  '160.0.0.0/5',
+  '168.0.0.0/6',
+  '172.0.0.0/12',
+  '172.32.0.0/11',
+  '172.64.0.0/10',
+  '172.128.0.0/9',
+  '173.0.0.0/8',
+  '174.0.0.0/7',
+  '176.0.0.0/4',
+  '192.0.0.0/9',
+  '192.128.0.0/11',
+  '192.160.0.0/13',
+  '192.169.0.0/16',
+  '192.170.0.0/15',
+  '192.172.0.0/14',
+  '192.176.0.0/12',
+  '192.192.0.0/10',
+  '193.0.0.0/8',
+  '194.0.0.0/7',
+  '196.0.0.0/6',
+  '200.0.0.0/5',
+  '208.0.0.0/4',
+  '240.0.0.0/4'
 ];
+
+/** Address family identifiers used by connection.NetAddress. */
+const AF_INET = 1;
+const AF_INET6 = 2;
+
+function netAddress(address: string, family: number): connection.NetAddress {
+  const a: connection.NetAddress = { address: address, family: family };
+  return a;
+}
+
+function linkAddress(address: string, family: number, prefixLength: number): connection.LinkAddress {
+  const l: connection.LinkAddress = { address: netAddress(address, family), prefixLength: prefixLength };
+  return l;
+}
+
+/**
+ * protectProcessNet() only exists from API 22. Reached through a locally
+ * declared interface rather than a direct call so the project can keep
+ * compatibleSdkVersion at 5.0.0(12): below API 22 the member is absent and the
+ * ability logs the consequence instead of failing to compile.
+ */
+interface ProtectProcessNetCapable {
+  protectProcessNet: () => Promise<void>;
+}
 
 const GEO_FILES: string[] = ['geoip.dat', 'geosite.dat'];
 
@@ -194,33 +251,33 @@ export default class V2RayVpnAbility extends VpnExtensionAbility {
 
   private buildAddresses(req: VpnStartRequest): connection.LinkAddress[] {
     const out: connection.LinkAddress[] = [];
-    out.push({ address: req.vpnIpv4Address, prefixLength: 30 });
+    out.push(linkAddress(req.vpnIpv4Address, AF_INET, 30));
     if (req.ipv6Enabled) {
-      out.push({ address: req.vpnIpv6Address, prefixLength: 126 });
+      out.push(linkAddress(req.vpnIpv6Address, AF_INET6, 126));
     }
     return out;
   }
 
   private buildRoutes(req: VpnStartRequest): connection.RouteInfo[] {
     const out: connection.RouteInfo[] = [];
-    const zero: connection.LinkAddress = { address: '0.0.0.0', prefixLength: 0 };
+    const v4Zero: connection.NetAddress = netAddress('0.0.0.0', AF_INET);
 
     if (req.bypassLan) {
-      for (const r of LAN_ROUTES) {
+      for (const r of ROUTED_IP_LIST) {
         const parts = r.split('/');
         out.push({
-          interface: 'vpn-tun',
-          destination: { address: parts[0], prefixLength: Number.parseInt(parts[1], 10) },
-          gateway: zero,
+          interface: 'v2rayng-tun',
+          destination: linkAddress(parts[0], AF_INET, Number.parseInt(parts[1], 10)),
+          gateway: v4Zero,
           hasGateway: false,
           isDefaultRoute: false
         });
       }
     } else {
       out.push({
-        interface: 'vpn-tun',
-        destination: { address: '0.0.0.0', prefixLength: 0 },
-        gateway: zero,
+        interface: 'v2rayng-tun',
+        destination: linkAddress('0.0.0.0', AF_INET, 0),
+        gateway: v4Zero,
         hasGateway: false,
         isDefaultRoute: true
       });
@@ -228,9 +285,9 @@ export default class V2RayVpnAbility extends VpnExtensionAbility {
 
     if (req.ipv6Enabled) {
       out.push({
-        interface: 'vpn-tun',
-        destination: { address: '::', prefixLength: 0 },
-        gateway: { address: '::', prefixLength: 0 },
+        interface: 'v2rayng-tun',
+        destination: linkAddress('::', AF_INET6, 0),
+        gateway: netAddress('::', AF_INET6),
         hasGateway: false,
         isDefaultRoute: true
       });
@@ -249,14 +306,13 @@ export default class V2RayVpnAbility extends VpnExtensionAbility {
       return;
     }
     try {
-      const handle = this.conn as ESObject;
-      const fn = handle.protectProcessNet;
-      if (typeof fn !== 'function') {
+      const handle: ProtectProcessNetCapable = this.conn as Object as ProtectProcessNetCapable;
+      if (typeof handle.protectProcessNet !== 'function') {
         Log.w('protectProcess: protectProcessNet unavailable (API < 22). '
-          + '服务端连接可能被回灌进隧道，请升级系统或改用全局路由排除。');
+          + '服务端连接会被默认路由回灌进隧道，VPN 模式在旧系统上不可用。');
         return;
       }
-      await (fn.call(handle) as Promise<void>);
+      await handle.protectProcessNet();
       Log.i('protectProcess: all subsequently created sockets bypass the tunnel');
     } catch (e) {
       Log.w('protectProcess failed: ' + JSON.stringify(e));
