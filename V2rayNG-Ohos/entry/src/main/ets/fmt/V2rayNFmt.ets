@@ -66,8 +66,20 @@ class ShareItem {
   EchConfigList: string = '';
   VerifyPeerCertByName: string = '';
   Finalmask: string = '';
-  ProtoExtraObj: ProtoExtra | null = null;
+  ProtoExtraObj: ProtoExtra | null = null; // may be absent in the JSON
   TransportExtraObj: TransportExtra | null = null;
+}
+
+/**
+ * Coerces a v2rayn field to a string.
+ *
+ * A key that the JSON omits parses to `undefined`, and ProfileItem's fields are
+ * plain `string`s whose defaults only apply at construction — assigning
+ * `undefined` over them leaves a trap that blows up later at the first
+ * `.trim()` / `.length`. Every optional v2rayn field goes through here.
+ */
+function opt(v: string | null | undefined): string {
+  return (v === undefined || v === null) ? '' : v;
 }
 
 export class V2rayNFmt {
@@ -112,8 +124,13 @@ export class V2rayNFmt {
         return null;
     }
 
-    const proto = item.ProtoExtraObj;
-    const trans = item.TransportExtraObj;
+    // A key that is absent from the JSON parses to `undefined`, NOT `null`, so
+    // both have to be normalised here — checking only for null threw for every
+    // v2rayn item that omitted the optional sub-objects.
+    const proto: ProtoExtra | null =
+      (item.ProtoExtraObj === undefined || item.ProtoExtraObj === null) ? null : item.ProtoExtraObj;
+    const trans: TransportExtra | null =
+      (item.TransportExtraObj === undefined || item.TransportExtraObj === null) ? null : item.TransportExtraObj;
 
     let network = '';
     if (configType === EConfigType.HYSTERIA2) {
@@ -121,83 +138,88 @@ export class V2rayNFmt {
     } else if (item.Network === 'raw') {
       network = NetworkType.TCP;
     } else {
-      network = item.Network.length > 0 ? item.Network : NetworkType.TCP;
+      const nw = opt(item.Network);
+      network = nw.length > 0 ? nw : NetworkType.TCP;
     }
 
     const config = ProfileItem.create(configType);
-    config.remarks = item.Remarks;
-    config.server = item.Address;
-    config.serverPort = item.Port.toString();
-    config.password = item.Password;
+    config.remarks = opt(item.Remarks);
+    config.server = opt(item.Address);
+    config.serverPort = item.Port === undefined || item.Port === null ? '' : item.Port.toString();
+    config.password = opt(item.Password);
     config.method = V2rayNFmt.methodFor(configType, proto);
-    config.flow = proto === null ? '' : proto.Flow;
-    config.username = item.Username;
+    config.flow = proto === null ? '' : opt(proto.Flow);
+    config.username = opt(item.Username);
     config.network = network;
 
     if (network === NetworkType.TCP) {
-      config.headerType = trans === null ? '' : trans.RawHeaderType;
+      config.headerType = trans === null ? '' : opt(trans.RawHeaderType);
     } else if (network === NetworkType.KCP) {
-      config.headerType = trans === null ? '' : trans.KcpHeaderType;
+      config.headerType = trans === null ? '' : opt(trans.KcpHeaderType);
     }
     if (trans !== null) {
-      config.host = trans.Host;
-      config.path = trans.Path;
-      config.seed = trans.KcpSeed;
-      config.kcpMtu = trans.KcpMtu;
-      config.mode = trans.GrpcMode;
-      config.serviceName = trans.GrpcServiceName;
-      config.authority = trans.GrpcAuthority;
-      config.xhttpMode = trans.XhttpMode;
-      config.xhttpExtra = trans.XhttpExtra;
+      config.host = opt(trans.Host);
+      config.path = opt(trans.Path);
+      config.seed = opt(trans.KcpSeed);
+      config.kcpMtu = trans.KcpMtu === undefined || trans.KcpMtu === null ? 0 : trans.KcpMtu;
+      config.mode = opt(trans.GrpcMode);
+      config.serviceName = opt(trans.GrpcServiceName);
+      config.authority = opt(trans.GrpcAuthority);
+      config.xhttpMode = opt(trans.XhttpMode);
+      config.xhttpExtra = opt(trans.XhttpExtra);
     }
 
-    config.finalMask = item.Finalmask;
-    config.security = item.StreamSecurity;
-    config.sni = item.Sni;
-    config.alpn = item.Alpn;
-    config.fingerPrint = item.Fingerprint;
+    config.finalMask = opt(item.Finalmask);
+    config.security = opt(item.StreamSecurity);
+    config.sni = opt(item.Sni);
+    config.alpn = opt(item.Alpn);
+    config.fingerPrint = opt(item.Fingerprint);
     config.insecure = item.AllowInsecure === 'true' || item.AllowInsecure === '1';
-    config.echConfigList = item.EchConfigList;
-    config.verifyPeerCertByName = item.VerifyPeerCertByName;
-    config.pinnedCA256 = item.CertSha;
-    config.publicKey = item.PublicKey;
-    config.shortId = item.ShortId;
-    config.spiderX = item.SpiderX;
-    config.mldsa65Verify = item.Mldsa65Verify;
+    config.echConfigList = opt(item.EchConfigList);
+    config.verifyPeerCertByName = opt(item.VerifyPeerCertByName);
+    config.pinnedCA256 = opt(item.CertSha);
+    config.publicKey = opt(item.PublicKey);
+    config.shortId = opt(item.ShortId);
+    config.spiderX = opt(item.SpiderX);
+    config.mldsa65Verify = opt(item.Mldsa65Verify);
 
     if (configType === EConfigType.WIREGUARD) {
-      config.secretKey = item.Password;
+      config.secretKey = opt(item.Password);
     }
     if (proto !== null) {
-      config.preSharedKey = proto.WgPresharedKey;
-      config.localAddress = proto.WgInterfaceAddress;
-      config.reserved = proto.WgReserved;
-      config.mtu = proto.WgMtu;
-      config.obfsPassword = proto.SalamanderPass;
-      config.portHopping = proto.Ports;
-      config.portHoppingInterval = proto.HopInterval;
-      if (proto.DownMbps > 0) {
-        config.bandwidthDown = proto.DownMbps.toString() + 'Mbps';
+      config.preSharedKey = opt(proto.WgPresharedKey);
+      config.localAddress = opt(proto.WgInterfaceAddress);
+      config.reserved = opt(proto.WgReserved);
+      config.mtu = proto.WgMtu === undefined || proto.WgMtu === null ? 0 : proto.WgMtu;
+      config.obfsPassword = opt(proto.SalamanderPass);
+      config.portHopping = opt(proto.Ports);
+      config.portHoppingInterval = opt(proto.HopInterval);
+      const down = proto.DownMbps === undefined || proto.DownMbps === null ? 0 : proto.DownMbps;
+      if (down > 0) {
+        config.bandwidthDown = down.toString() + 'Mbps';
       }
-      if (proto.UpMbps > 0) {
-        config.bandwidthUp = proto.UpMbps.toString() + 'Mbps';
+      const up = proto.UpMbps === undefined || proto.UpMbps === null ? 0 : proto.UpMbps;
+      if (up > 0) {
+        config.bandwidthUp = up.toString() + 'Mbps';
       }
     }
     return config;
   }
 
   private static methodFor(configType: EConfigType, proto: ProtoExtra | null): string {
-    if (proto === null) {
+    if (proto === null || proto === undefined) {
       return configType === EConfigType.VMESS ? 'auto' : 'none';
     }
     if (configType === EConfigType.VMESS) {
-      return proto.VmessSecurity.length > 0 ? proto.VmessSecurity : 'auto';
+      const sec = opt(proto.VmessSecurity);
+      return sec.length > 0 ? sec : 'auto';
     }
     if (configType === EConfigType.SHADOWSOCKS) {
-      return proto.SsMethod;
+      return opt(proto.SsMethod);
     }
     if (configType === EConfigType.VLESS) {
-      return proto.VlessEncryption.length > 0 ? proto.VlessEncryption : 'none';
+      const enc = opt(proto.VlessEncryption);
+      return enc.length > 0 ? enc : 'none';
     }
     return '';
   }

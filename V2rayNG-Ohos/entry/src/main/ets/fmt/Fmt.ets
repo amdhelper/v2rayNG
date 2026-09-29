@@ -67,7 +67,10 @@ export class Fmt {
       Log.w('Fmt.parse: unrecognised link scheme');
       return null;
     } catch (e) {
-      Log.e('Fmt.parse failed: ' + JSON.stringify(e));
+      // JSON.stringify(new Error(...)) is "{}" — log the message instead, or
+      // every failure looks identical.
+      const err = e as Error;
+      Log.e('Fmt.parse failed: ' + (err === undefined || err === null ? 'unknown' : err.message));
       return null;
     }
   }
@@ -104,6 +107,17 @@ export class Fmt {
       }
     }
     const out: ProfileItem[] = [];
+    const firstCh = body.charAt(0);
+    const lastCh = body.charAt(body.length - 1);
+    if (firstCh === '{' && lastCh === '}') {
+      // A whole Xray JSON config (EConfigType.CUSTOM) is a single entry that
+      // happens to span many lines — splitting it on newlines would shred it.
+      const single = Fmt.parse(body);
+      if (single !== null) {
+        out.push(single);
+      }
+      return out;
+    }
     for (const line of body.split('\n')) {
       const item = Fmt.parse(line.trim());
       if (item !== null) {

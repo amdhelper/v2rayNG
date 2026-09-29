@@ -141,6 +141,18 @@ export class ProfileItem {
 
   browserDialerMode: string = '';
 
+  /**
+   * Port-local field: the verbatim Xray JSON of an EConfigType.CUSTOM entry.
+   *
+   * The Android build keeps this beside the profile instead
+   * (MmkvManager.encodeServerRaw/decodeServerRaw, keyed by guid) and reads it
+   * with CoreConfigManager.buildV2rayCustomConfig. Holding it on the entity
+   * means it persists, dedupes and deletes together with the profile and needs
+   * no extra bookkeeping; gson on the Android side ignores the extra key, so
+   * the stored JSON stays interchangeable with the Android build.
+   */
+  rawJson: string = '';
+
   /** "host:port" for display, matching ProfileItem.getServerAddressAndPort(). */
   getServerAddressAndPort(): string {
     return this.server + ':' + this.serverPort;

@@ -176,7 +176,39 @@ bash scripts/build_hap.sh debug
 
 ---
 
-## 4. 产物校验（每次改内核都要跑）
+## 4. 校验：两层门禁
+
+### 4.1 纯逻辑门禁（不需要设备，改解析/配置后必跑）
+
+```bash
+bash scripts/verify_logic.sh
+```
+
+它做三件事，任何一步红就非零退出：
+
+1. 把 `entry/src/main/ets/` 的纯逻辑源码（`.ets` 当 `.ts`）用 esbuild 打成一份 Node 可跑的
+   bundle，`@ohos.*` 用 shims 顶掉（`scripts/logic_check/shims/`）；
+2. 跑一组合法的分享链接语料 + 一组**必须解析失败**的负向用例，断言每个字段；
+   再把每条 profile 生成的配置（完整配置 / 测速配置）写进 `out/`，出站片段写进 `out-fragments/`；
+3. **把 `out/` 里的每一份配置喂给钉版 xray-core**（`serial.LoadJSONConfig` + `core.New`，
+   和桥里调的是同两个函数）。
+
+第 3 步是关键：它抓的是「生成器产出消费端不接受的东西」。实测它在开发期抓出了三个真问题：
+
+- **`V2rayNFmt` 用 `=== null` 判 JSON 缺失字段**——JSON 里缺失的键是 `undefined`，
+  于是任何省略可选子对象的 v2rayN 条目都会抛异常；
+- **同一处把 `undefined` 直接赋给 `string` 字段**，后续 `.trim()` 才炸——
+  已统一经 `opt()` 归一化；
+- 语料里 WireGuard 的密钥不是合法 base64（41 字符），core 会拒整个出站。
+
+两份**故意失败**的用例（`90-upstream-h2.json`、`91-upstream-allowinsecure.json`）由
+`out/expected_failures.json` 声明，校验器要求它们**必须失败且错误信息含指定理由**——
+这样 §6 的两条结论是**可执行断言**，不是文档承诺。另外校验器会拒绝 `outbounds` 为空的
+输入，防止「拿碎片当整份配置验」这种**假绿**。
+
+它**不覆盖**：NAPI 桥、VPN 扩展、任何需要平台的东西。那些只有编 HAP + 真机才能验。
+
+### 4.2 原生产物指纹（每次改内核都要跑）
 
 ```bash
 SO=entry/src/main/cpp/prebuilt/arm64-v8a/libv2rayohos.so
@@ -217,9 +249,15 @@ VPN 扩展进程调 cgo 不 SIGSEGV。
 - 只实现了 4 个路由预设中的 3 个（bypass-mainland / bypass-lan / all），
   自定义 routing 规则集、ruleset 下载、balancer/策略组、observatory 未移植。
 - FakeDNS 只有基础形态；`browser_dialer`（浏览器拨号）未移植。
-- 自定义 JSON 配置（`EConfigType.CUSTOM`）的 process/UID 替换逻辑未移植
-  （鸿蒙无 `getConnectionOwnerUid`，分应用路由改为依赖
-  `VpnConfig.trustedApplications/blockedApplications`）。
+- 自定义 JSON 配置（`EConfigType.CUSTOM`）**已支持连接**：
+  `XrayConfigBuilder.buildCustom()` 把存的原始 JSON 原样使用，并按上游
+  `buildV2rayCustomConfig` 注入 `stats`/`policy`。仍缺两块：
+  (a) `process` 路由规则的「包名 → UID」替换（鸿蒙无 `getConnectionOwnerUid`，
+  规则原样透传，等于不生效）；(b) tun inbound 注入（只在非 HEV TUN 模式下才会走到，
+  本移植恒用 hev）。
+  原始 JSON 存在 `ProfileItem.rawJson` 上（Android 侧放在
+  `MmkvManager.decodeServerRaw`；放实体上让持久化/去重/删除自动一起走，
+  gson 会忽略这个多出来的键，两边存的 JSON 仍可互换）。
 - 流量统计走 `QueryAllOutboundTrafficStats`（与 Android 同名同格式），
   但 outbound 级别的分标签展示未做。
 

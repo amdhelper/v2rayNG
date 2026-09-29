@@ -21,7 +21,10 @@ bash scripts/bootstrap_ohos_go.sh
 # ② 原生内核
 bash scripts/build_native_all.sh
 
-# ③ HAP
+# ③ 纯逻辑门禁（不需要设备；改解析/配置后必跑）
+bash scripts/verify_logic.sh
+
+# ④ HAP
 bash scripts/build_hap.sh debug
 # → entry/build/default/outputs/default/entry-default-unsigned.hap
 ```
@@ -51,6 +54,7 @@ V2rayNG-Ohos/
 │   └── resources/rawfile/          geoip.dat / geosite.dat（构建生成，不入库）
 ├── native/libv2ray_ohos/           Xray 内核的 c-shared 包装（自研 C ABI）
 ├── scripts/                        bootstrap / build_* / sync_geo_assets
+│   └── logic_check/                host 侧回归门禁（语料 + 真实 xray-core 校验）
 └── docs/OHOS_PORT.md               ★ 移植文档：架构、TLS 墙、构建、校验、已知缺口
 ```
 

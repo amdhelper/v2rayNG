@@ -334,6 +334,16 @@ class BlackholeSettings {
 }
 
 /** infra/conf/xray.go — LogConfig. */
+/**
+ * Type façade over an EConfigType.CUSTOM config. Only the two keys this port
+ * touches are declared; everything else in the user's JSON is carried through
+ * untouched by the JSON.parse -> JSON.stringify round trip.
+ */
+class CustomConfigRoot {
+  stats?: StatsConfig;
+  policy?: PolicyConfig;
+}
+
 class LogConfig {
   loglevel?: string;
   error?: string;
@@ -1275,7 +1285,72 @@ export class XrayConfigBuilder {
    * No inbounds, no routing, no DNS, and mux is stripped from the proxy outbound
    * (CoreConfigManager.postProcessForSpeedtest nulls every outbound's mux).
    */
+  /**
+   * Build the config for an EConfigType.CUSTOM entry: the stored raw Xray JSON
+   * used verbatim, plus the stats/policy injection that
+   * CoreConfigManager.buildV2rayCustomConfig performs.
+   *
+   * Deliberately NOT ported from that function:
+   *   - the package-name -> UID rewrite for `process` routing rules: HarmonyOS
+   *     has no getConnectionOwnerUid equivalent, so process rules in a custom
+   *     config are passed through untouched and simply will not match;
+   *   - the tun-inbound injection: it is only reached when the VPN is not using
+   *     HEV TUN, and this port always drives hev-socks5-tunnel.
+   *
+   * Returns '' when the raw config is missing or not a JSON object; callers
+   * must treat that as "cannot connect" rather than sending '' to the core.
+   */
+  static buildCustom(profile: ProfileItem): string {
+    const raw: string = profile.rawJson.trim();
+    if (raw.length === 0) {
+      Log.e('XrayConfigBuilder.buildCustom: rawJson is empty for guid ' + profile.guid);
+      return '';
+    }
+    if (raw.charAt(0) !== '{') {
+      Log.e('XrayConfigBuilder.buildCustom: rawJson is not a JSON object');
+      return '';
+    }
+    let root: CustomConfigRoot;
+    try {
+      root = JSON.parse(raw) as CustomConfigRoot;
+    } catch (e) {
+      Log.e('XrayConfigBuilder.buildCustom: rawJson does not parse: ' + JSON.stringify(e));
+      return '';
+    }
+
+    // Parse+re-stringify preserves every key the user wrote (unknown fields
+    // survive as plain object properties); we only add what is missing.
+    if (root.stats === undefined || root.stats === null) {
+      root.stats = new StatsConfig();
+    }
+    if (root.policy === undefined || root.policy === null) {
+      root.policy = XrayConfigBuilder.buildPolicy();
+    } else if (root.policy.system === undefined || root.policy.system === null) {
+      Log.w('XrayConfigBuilder.buildCustom: the custom config has its own policy without a '
+        + 'system block, so per-outbound traffic stats stay off (same as the Android build).');
+    }
+    return JSON.stringify(root);
+  }
+
+  /**
+   * Single entry point for "give me the config for this profile": routes
+   * CUSTOM to the raw-config path and everything else to the generator.
+   */
+  static buildFor(profile: ProfileItem, isDelayTest: boolean): string {
+    if (profile.configType === EConfigType.CUSTOM) {
+      return XrayConfigBuilder.buildCustom(profile);
+    }
+    return XrayConfigBuilder.build(profile, isDelayTest);
+  }
+
   static buildOutboundOnly(profile: ProfileItem): string {
+    if (profile.configType === EConfigType.CUSTOM) {
+      // A custom config has no outbound we can isolate; without this guard the
+      // measurement would dial through the direct outbound and report a bogus
+      // "fast" latency for a server that was never contacted.
+      Log.w('XrayConfigBuilder.buildOutboundOnly: not supported for CUSTOM configs');
+      return '';
+    }
     const cfg: AppSettingsData = settings.get();
     const root: XrayConfig = new XrayConfig();
     const log: LogConfig = new LogConfig();

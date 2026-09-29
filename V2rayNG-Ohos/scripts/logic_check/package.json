@@ -1,0 +1,12 @@
+{
+  "name": "v2rayng-ohos-logic-check",
+  "private": true,
+  "type": "module",
+  "description": "Host-side regression gate for the v2rayNG HarmonyOS port: runs the real ArkTS pure-logic sources under Node and feeds the generated Xray configs to the pinned xray-core.",
+  "scripts": {
+    "check": "node bundle.mjs && node run.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

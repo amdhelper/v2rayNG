@@ -8,7 +8,7 @@ import { XrayConfigBuilder } from './XrayConfigBuilder';
 import { HevTunConfig } from './HevTunConfig';
 import { VpnFiles, VpnStartRequest, VpnStatus } from './VpnFiles';
 import { settings } from '../model/AppSettings';
-import { ProfileItem } from '../model/Profile';
+import { ProfileItem, EConfigType } from '../model/Profile';
 import { profiles } from '../model/ProfileStore';
 import { getUiAbilityContext } from '../common/AppContext';
 import { measureDelayConcurrent } from './DelayTask';
@@ -122,6 +122,11 @@ export class ConnectionController {
     VpnFiles.writeStatus(ctx.filesDir, ConnectionController.staleStatus);
 
     const req = ConnectionController.buildRequest(ctx, profile);
+    if (req === null) {
+      ConnectionController.writeError(ctx.filesDir,
+        '无法生成连接配置（自定义 JSON 配置为空或不是合法 JSON）');
+      return false;
+    }
     VpnFiles.writeRequest(ctx.filesDir, req);
 
     const want: Want = {
@@ -191,6 +196,10 @@ export class ConnectionController {
    * worker: freezing the UI thread for eight seconds is not acceptable.
    */
   static async testDelay(profile: ProfileItem, timeoutMs?: number): Promise<number> {
+    if (profile.configType === EConfigType.CUSTOM) {
+      Log.w('testDelay: a custom JSON config cannot be latency-tested without connecting');
+      return -1;
+    }
     const cfg = XrayConfigBuilder.buildOutboundOnly(profile);
     const s = settings.get();
     const url = s.delayTestUrl;
@@ -223,11 +232,17 @@ export class ConnectionController {
 
   // -------------------------------------------------------------------------
 
-  private static buildRequest(ctx: common.UIAbilityContext, profile: ProfileItem): VpnStartRequest {
+  /** Returns null when the config could not be built (the caller reports it). */
+  private static buildRequest(ctx: common.UIAbilityContext, profile: ProfileItem): VpnStartRequest | null {
     const s = settings.get();
+    const configJson = XrayConfigBuilder.buildFor(profile, false);
+    if (configJson.length === 0) {
+      Log.e('ConnectionController: config could not be built for ' + profile.remarks);
+      return null;
+    }
     const req = new VpnStartRequest();
     req.remarks = profile.remarks;
-    req.configJson = XrayConfigBuilder.build(profile, false);
+    req.configJson = configJson;
     req.hevYaml = HevTunConfig.build(0);
     req.xuKey = s.xuKey;
     req.socksPort = Number.parseInt(s.socksPort, 10);

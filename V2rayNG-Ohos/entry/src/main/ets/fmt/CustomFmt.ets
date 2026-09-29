@@ -53,6 +53,9 @@ export class CustomFmt {
     const addr = CustomFmt.extractAddress(root);
     config.server = addr[0];
     config.serverPort = addr[1];
+    // The whole JSON is the configuration; CoreConfigManager uses it verbatim
+    // (buildV2rayCustomConfig), so keep it on the profile.
+    config.rawJson = str;
     return config;
   }
 
