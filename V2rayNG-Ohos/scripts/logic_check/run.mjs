@@ -345,6 +345,35 @@ eq('mux on + socks -> disabled', muxOf(socksy).concurrency, -1);
 s.muxEnabled = false;
 s.muxXudpProxyUDP443 = 'reject';
 
+// ── socks inbound ─────────────────────────────────────────────────────────
+// PREF_SOCKS_ENABLE_UDP and the optional credentials were wired into both the
+// xray inbound and the hev yaml before the settings page exposed them, so the
+// settings are new but the behaviour has to be pinned either way.
+const socksIn = (profile, delay) =>
+  (JSON.parse(XrayConfigBuilder.buildFor(profile, delay)).inbounds ?? [])[0]?.settings;
+
+const socksProfile = parsed.find((p) => p.name === '13-vless-kcp-seed').profile;
+s.socksEnableUdp = true;
+eq('socks udp on by default', socksIn(socksProfile, false).udp, true);
+s.socksEnableUdp = false;
+eq('socks udp follows the setting', socksIn(socksProfile, false).udp, false);
+s.socksEnableUdp = true;
+
+eq('socks noauth when no credentials', socksIn(socksProfile, false).auth, 'noauth');
+s.socksUsername = 'u1';
+s.socksPassword = 'p1';
+const withAuth = socksIn(socksProfile, false);
+eq('socks auth mode when credentials set', withAuth.auth, 'password');
+eq('socks account emitted', withAuth.accounts, [{ user: 'u1', pass: 'p1' }]);
+// A username without a password must not half-enable auth: the core would
+// reject an account with an empty pass, killing the whole config.
+s.socksPassword = '';
+eq('socks username alone stays noauth', socksIn(socksProfile, false).auth, 'noauth');
+s.socksUsername = '';
+s.socksPassword = '';
+// The delay-test config has no inbounds at all (nothing may listen while testing).
+eq('delay test opens no inbound', socksIn(socksProfile, true), undefined);
+
 // Deliberate upstream-removed fixtures. The Go checker asserts these FAIL with
 // the documented reason, so docs/OHOS_PORT.md §6 is enforced, not just claimed.
 const h2 = JSON.parse(XrayConfigBuilder.buildFor(vless, false));

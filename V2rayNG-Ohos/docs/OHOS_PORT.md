@@ -317,6 +317,14 @@ VPN 扩展进程调 cgo 不 SIGSEGV。
   之前那句"应用选择器尚未实现，开关会保存但暂不生效"——它既没说清平台原因，
   而且在用户真填了包名之后**这句话还是错的**。
 
+**本地 SOCKS 入站：凭据与 UDP 开关已暴露**
+- `socksUsername` / `socksPassword` 早就同时被 xray 入站和 hev 的 yaml 消费
+  （两边都读同一对值），但设置页从来没让用户填过——等于写死成"不认证"。
+  现已补上，并且客户端与 tun2socks 用同一份凭据，不会出现"内核要认证、
+  hev 不发认证"这种错配。
+- `PREF_SOCKS_ENABLE_UDP`（上游默认 `true`）已接成开关；关掉后经本地代理的
+  UDP 是**被拒**而不是直连泄漏。
+
 **Mux（分流复用）：可配了，默认行为与安卓一致**
 - 四个 AppConfig 键（`PREF_MUX_ENABLED` / `PREF_MUX_CONCURRENCY` /
   `PREF_MUX_XUDP_CONCURRENCY` / `PREF_MUX_XUDP_QUIC`）已接进设置页。

@@ -19,6 +19,8 @@ export class AppSettingsData {
   httpPort: string = '10809';
   socksUsername: string = '';
   socksPassword: string = '';
+  /** AppConfig.DEFAULT_SOCKS_ENABLE_UDP = true. */
+  socksEnableUdp: boolean = true;
 
   vpnMtu: number = 1500;
   ipv6Enabled: boolean = false;
@@ -99,6 +101,7 @@ class Store {
     if (over.httpPort !== undefined) { out.httpPort = over.httpPort; }
     if (over.socksUsername !== undefined) { out.socksUsername = over.socksUsername; }
     if (over.socksPassword !== undefined) { out.socksPassword = over.socksPassword; }
+    if (over.socksEnableUdp !== undefined) { out.socksEnableUdp = over.socksEnableUdp; }
     if (over.vpnMtu !== undefined) { out.vpnMtu = over.vpnMtu; }
     if (over.ipv6Enabled !== undefined) { out.ipv6Enabled = over.ipv6Enabled; }
     if (over.bypassLan !== undefined) { out.bypassLan = over.bypassLan; }

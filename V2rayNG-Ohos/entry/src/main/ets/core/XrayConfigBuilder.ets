@@ -1495,7 +1495,9 @@ export class XrayConfigBuilder {
     inb.protocol = 'socks';
 
     const st: InboundSettings = new InboundSettings();
-    st.udp = true;
+    // AppConfig.PREF_SOCKS_ENABLE_UDP, default true. Off means UDP through the
+    // local proxy is refused rather than leaking direct.
+    st.udp = cfg.socksEnableUdp;
     st.userLevel = DEFAULT_LEVEL;
     if (cfg.socksUsername.length > 0 && cfg.socksPassword.length > 0) {
       st.auth = 'password';

@@ -84,6 +84,9 @@ struct Settings {
   @State vpnMode: boolean = true;
   @State localProxyEnabled: boolean = true;
   @State socksPort: string = '10808';
+  @State socksUsername: string = '';
+  @State socksPassword: string = '';
+  @State socksEnableUdp: boolean = true;
   @State httpPort: string = '10809';
   @State vpnMtu: number = 1500;
   @State ipv6Enabled: boolean = false;
@@ -115,6 +118,9 @@ struct Settings {
     this.vpnMode = d.vpnMode;
     this.localProxyEnabled = d.localProxyEnabled;
     this.socksPort = d.socksPort;
+    this.socksUsername = d.socksUsername;
+    this.socksPassword = d.socksPassword;
+    this.socksEnableUdp = d.socksEnableUdp;
     this.httpPort = d.httpPort;
     this.vpnMtu = d.vpnMtu;
     this.ipv6Enabled = d.ipv6Enabled;
@@ -401,6 +407,25 @@ struct Settings {
           this.socksPort = v;
           this.commit((d: AppSettingsData) => {
             d.socksPort = v;
+          });
+        })
+        this.SwitchRow('SOCKS 允许 UDP', '关掉后经本地代理的 UDP 一律拒绝（不会直连泄漏）', this.socksEnableUdp,
+          (v: boolean) => {
+            this.socksEnableUdp = v;
+            this.commit((d: AppSettingsData) => {
+              d.socksEnableUdp = v;
+            });
+          })
+        this.TextRow('SOCKS 用户名（可选）', this.socksUsername, '留空表示不认证', (v: string) => {
+          this.socksUsername = v;
+          this.commit((d: AppSettingsData) => {
+            d.socksUsername = v;
+          });
+        })
+        this.TextRow('SOCKS 密码（可选）', this.socksPassword, '与用户名同时填写才生效', (v: string) => {
+          this.socksPassword = v;
+          this.commit((d: AppSettingsData) => {
+            d.socksPassword = v;
           });
         })
         this.TextRow('HTTP 端口（未实现，无 HTTP 入站）', this.httpPort, '10809', (v: string) => {
