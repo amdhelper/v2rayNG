@@ -122,15 +122,26 @@ struct Index {
   private testing: boolean = false;
 
   aboutToAppear(): void {
-    this.selected = profiles.selectedGuid();
-    this.rebuild();
-    this.connected = ConnectionController.isConnected();
-    this.stateText = this.connected ? '已连接' : '未连接';
+    this.syncFromStore();
     this.startTimers();
+  }
+
+  /**
+   * 从 ServerEdit 返回时 ArkUI 只触发 onPageShow，不会再走 aboutToAppear，
+   * 所以这里必须重建列表，否则新增/编辑/删除的结果看不见。
+   */
+  onPageShow(): void {
+    this.syncFromStore();
   }
 
   aboutToDisappear(): void {
     this.stopTimers();
+  }
+
+  private syncFromStore(): void {
+    this.rebuild();
+    this.connected = ConnectionController.isConnected();
+    this.stateText = this.describeState();
   }
 
   // -------------------------------------------------------------------------
@@ -189,7 +200,10 @@ struct Index {
       this.pollTraffic();
     }, TRAFFIC_TICK_MS);
     this.delayTimer = setInterval(() => {
-      this.refreshDelaysIfConnected();
+      // 定时器里不能 await，异常必须就地吞掉，否则变成 unhandled rejection。
+      this.refreshDelaysIfConnected().catch((e: Object) => {
+        Log.w('Index: delayed delay refresh failed: ' + JSON.stringify(e));
+      });
     }, DELAY_REFRESH_MS);
   }
 
@@ -220,7 +234,7 @@ struct Index {
   }
 
   /** 状态与流量一起刷：连接可能在我们没点按钮的时候断开（扩展被杀等）。 */
-  private async refreshState(): Promise<void> {
+  private refreshState(): void {
     const was: boolean = this.connected;
     this.connected = ConnectionController.isConnected();
     if (was !== this.connected) {
