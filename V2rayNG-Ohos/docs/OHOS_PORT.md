@@ -298,6 +298,25 @@ VPN 扩展进程调 cgo 不 SIGSEGV。
   / `blockedApplications`（自身 bundleName 恒在 blocked 里，避免回环）。
   作用时机是**建立隧道的瞬间**，所以改名单要重连才生效。
 
+**连接模式与本地代理：三个开关是真的没实现（已如实标注，不再假装生效）**
+- `vpnMode`（"关闭后仅保留本地代理监听"）、`localProxyEnabled`、`httpPort`、
+  `appendHttpProxy` 这四个设置项**改前改后都不影响行为**（用脚本扫过：在
+  `model/AppSettings.ets` 里声明、在设置页里读写，但**全仓没有任何消费者**）。
+- `appendHttpProxy` 在**鸿蒙上根本做不到**：安卓是
+  `CoreVpnService.configurePlatformFeatures()` 里的
+  `Builder.setHttpProxy(ProxyInfo.buildDirectProxy(...))`，而鸿蒙
+  `@ohos.net.vpnExtension.d.ts` 的 `VpnConfig` **没有任何代理字段**（全文件搜
+  "proxy" 零命中）。这不是没做，是平台没有。
+- 其余三个属于**没做**："仅本地代理"模式需要在 UI 进程里直接
+  `CoreNative.startCore(只含入站的配置)`、不经 VPN 扩展、并由 UI 侧自己维护状态，
+  是一条**独立于 VPN 的连接路径**。它在没有真机的情况下无法验证，而它偏偏又在
+  连接主路径上——**宁可先不做也不塞一条没验证过的连接路径进去**（构建通过 ≠ 能用）。
+  实现它的前提是先在真机上把 VPN 模式跑通。
+- 设置页现在把这四项明确标成"未实现/不可实现"，并说明"开关会照常保存
+  （便于与安卓版互相导入设置），但当前只有 VPN 模式真正生效"。反例是
+  之前那句"应用选择器尚未实现，开关会保存但暂不生效"——它既没说清平台原因，
+  而且在用户真填了包名之后**这句话还是错的**。
+
 **其他**
 - 订阅 URL 拉取用明文 http 客户端（与 Android 一致），未加计量/重试策略。
 - 开机自启、常驻通知、快捷开关（Android 的 QSTile/Widget/Tasker）未移植。

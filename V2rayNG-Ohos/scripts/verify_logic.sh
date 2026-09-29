@@ -29,17 +29,20 @@ if [ ! -x node_modules/.bin/esbuild ]; then
   npm install --no-audit --no-fund --silent
 fi
 
-echo "=== [0/3] geo data (routing rules need it; the checker refuses without it) ==="
+echo "=== [0/4] geo data (routing rules need it; the checker refuses without it) ==="
 bash "$ROOT_DIR/scripts/sync_geo_assets.sh"
 export XRAY_LOCATION_ASSET="$ROOT_DIR/entry/src/main/resources/rawfile"
 
-echo "=== [1/3] bundling the port's pure logic ==="
+echo "=== [1/4] dead-setting audit (a toggle nothing reads is a toggle that lies) ==="
+"$NODE_BIN" check_dead_settings.mjs
+
+echo "=== [2/4] bundling the port's pure logic ==="
 "$NODE_BIN" bundle.mjs
 
-echo "=== [2/3] corpus assertions + config generation ==="
+echo "=== [3/4] corpus assertions + config generation ==="
 "$NODE_BIN" run.mjs
 
-echo "=== [3/3] feeding the generated configs to the pinned xray-core ==="
+echo "=== [4/4] feeding the generated configs to the pinned xray-core ==="
 # xray-core at this revision needs go >= 1.26, which the system Go is not; the
 # OHOS fork's toolchain runs on the host too, so reuse it.
 GO_BIN=""

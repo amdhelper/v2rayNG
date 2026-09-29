@@ -371,14 +371,14 @@ struct Settings {
           .margin({ bottom: 4 })
 
         // --- 基础 ---
-        this.Card('基础', 'VPN 模式由系统 VPN 扩展承载；本地代理提供 SOCKS/HTTP 端口')
-        this.SwitchRow('VPN 模式', '关闭后仅保留本地代理监听', this.vpnMode, (v: boolean) => {
+        this.Card('基础', 'VPN 模式由系统 VPN 扩展承载；本地代理提供 SOCKS 端口')
+        this.SwitchRow('VPN 模式（未实现：仅本地代理模式）', '见下方说明；开关会保存，但当前只会以 VPN 模式连接', this.vpnMode, (v: boolean) => {
           this.vpnMode = v;
           this.commit((d: AppSettingsData) => {
             d.vpnMode = v;
           });
         })
-        this.SwitchRow('本地代理', '在回环地址上开 SOCKS/HTTP 端口', this.localProxyEnabled, (v: boolean) => {
+        this.SwitchRow('本地代理（未实现）', 'SOCKS 入站目前无条件创建（VPN 的 tun2socks 必须连它），开关暂不改变行为', this.localProxyEnabled, (v: boolean) => {
           this.localProxyEnabled = v;
           this.commit((d: AppSettingsData) => {
             d.localProxyEnabled = v;
@@ -390,7 +390,7 @@ struct Settings {
             d.socksPort = v;
           });
         })
-        this.TextRow('HTTP 端口', this.httpPort, '10809', (v: string) => {
+        this.TextRow('HTTP 端口（未实现，无 HTTP 入站）', this.httpPort, '10809', (v: string) => {
           this.httpPort = v;
           this.commit((d: AppSettingsData) => {
             d.httpPort = v;
@@ -415,7 +415,7 @@ struct Settings {
             d.bypassLan = v;
           });
         })
-        this.SwitchRow('追加 HTTP 代理', '让受支持的应用额外走 HTTP 代理', this.appendHttpProxy, (v: boolean) => {
+        this.SwitchRow('追加 HTTP 代理（鸿蒙不可实现）', '安卓用 VpnService.Builder.setHttpProxy；鸿蒙 VpnConfig 没有任何代理字段，做不了', this.appendHttpProxy, (v: boolean) => {
           this.appendHttpProxy = v;
           this.commit((d: AppSettingsData) => {
             d.appendHttpProxy = v;
@@ -477,6 +477,16 @@ struct Settings {
             d.sniffingEnabled = v;
           });
         })
+
+        Text('说明：本机尚未实现“仅本地代理”模式（关掉 VPN、只在回环上开端口让浏览器等应用用），'
+          + '也没实现 HTTP 入站与“追加 HTTP 代理”。安卓版的“追加 HTTP 代理”靠的是 '
+          + 'VpnService.Builder.setHttpProxy()，鸿蒙的 VpnConfig 里根本没有代理字段，'
+          + '属于平台缺失而非没做。这些开关会照常保存（便于与安卓版互相导入设置），'
+          + '但当前只有 VPN 模式会真正生效。')
+          .fontSize(12)
+          .fontColor(C_WARN)
+          .width('100%')
+          .margin({ top: 4, bottom: 8 })
 
         // --- 分应用代理 ---
         this.Card('分应用代理', '')
