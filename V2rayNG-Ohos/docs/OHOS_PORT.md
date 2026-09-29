@@ -232,7 +232,7 @@ VPN 扩展进程调 cgo 不 SIGSEGV。
 **平台能力**
 - `protectProcessNet()` 需要 **API ≥ 22**。低于该版本时无法保护内核自己的
   服务端 socket，而路由表等价于默认路由，会形成回环；代码会打警告并继续，
-  旧系统上 VPN 模式实际上不可用（见 §6.9）。
+  旧系统上 VPN 模式实际上不可用（见 §7.9）。
 - 第三方 VPN 应用**上架华为应用市场需要华为审核 VPN 扩展能力**；
   本地自签只能自用/测试。
 - 桌面/太平等形态未做（`deviceTypes` 写了 phone/tablet/2in1，但 UI 按手机布局）。
@@ -244,7 +244,30 @@ VPN 扩展进程调 cgo 不 SIGSEGV。
 
 ---
 
-## 6. 把 Android 工程搬进 ArkTS 时必踩的坑（本仓库实测）
+## 6. 钉版内核的能力边界（已逐条核实，不是猜测）
+
+钉在 `xray-core v1.260327.1-0.20260728075948`（见 §2.1）。这个内核**主动移除**了若干
+老特性，触发时返回的是**错误而不是警告**——错一份配置，整个内核起不来。逐条查过
+`infra/conf/` 的源码，并和 **Android 侧钉的 `52a412d9e2f5`（2026-09-08）对比过目录树与代码**：
+
+| 特性 | 钉版内核行为 | Android 侧是否一样 | 本移植的处理 |
+|---|---|---|---|
+| `h2` / `quic` 传输 | `transport/internet/{http,quic}` 目录**已删除**，解析即报 `has been removed and migrated to XHTTP stream-one H2/H3` | **完全一样**（两个 commit 的目录树逐项一致） | 保留分支（与 Android 一致）。这两个传输的节点在两端都用不了，属于上游行为 |
+| `tlsSettings.allowInsecure` | `if c.AllowInsecure { return PrintRemovedFeatureError(...) }` —— **硬拒绝** | **完全一样** | 与 Android 一致仍会输出（`insecure == true && pinnedCA256 为空`），但**额外打一条 Log.w 说明后果**，避免只看到一个没法定位的 `config error` |
+| kcp 的 `header` / `seed` | `if HeaderConfig != nil \|\| Seed != nil { return PrintRemovedFeatureError("mkcp header & seed", "finalmask/udp header-* & mkcp-original & mkcp-aes128gcm") }` | 一样（新 commit 里这两个字段已从结构体删除） | **已按上游给出的迁移路径实现**：不写 `kcpSettings.header/seed`，改写 `finalmask.udp` 里的 `mkcp-legacy` mask |
+| 全局 `transport` 配置 / `legacy reverse` / Legacy XTLS / Trojan 的 `flow` / `freedom.noise`(单数) | 同样 `PrintRemovedFeatureError` | 一样 | 本移植未产生这些字段 |
+
+结论：**精鸿蒙版没有因为内核版本落后而少功能**——上面这些限制 Android 版一模一样。
+真正因工具链导致的差距只有一条：内核 revision 比 Android 侧早约 6 周（§2.1）。
+
+还有一个上游地雷值得记住：`allowInsecure` 被移除，但上游自己的
+`CoreOutboundBuilder.kt:560` **仍然在输出它**。也就是说，"节点用了自签证书且没配证书指纹"
+这类节点，在 Android 版上同样会起不来。移植版选择**保持行为一致 + 明确告警**，而不是
+偷偷替上游做决定。
+
+---
+
+## 7. 把 Android 工程搬进 ArkTS 时必踩的坑（本仓库实测）
 
 这几条都是"编译过了才敢说"的硬经验，改写 Kotlin/Java 逻辑时逐条对照：
 
@@ -298,7 +321,7 @@ VPN 扩展进程调 cgo 不 SIGSEGV。
 
 ---
 
-## 7. 参考实现
+## 8. 参考实现
 
 同类鸿蒙原生移植的公开实现，本移植在原生层与它们的技术路线一致（musl/TLSDESC
 那条结论是共通的），遇到问题时值得对照：

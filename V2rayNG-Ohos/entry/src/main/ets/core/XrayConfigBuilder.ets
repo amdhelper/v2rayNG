@@ -1141,6 +1141,17 @@ export class XrayConfigBuilder {
 
     const tls: TlsSettings = new TlsSettings();
     tls.allowInsecure = allowInsecure;
+    if (allowInsecure) {
+      // The pinned xray-core *rejects* allowInsecure outright
+      // (infra/conf/transport_security.go: `PrintRemovedFeatureError("allowInsecure", ...)`),
+      // which fails the whole config load — the core never starts. The Android
+      // builder has the same landmine, so behaviour is left faithful, but the
+      // failure is made diagnosable here instead of arriving as an opaque
+      // "config error" from the bridge.
+      Log.w('XrayConfigBuilder: emitting allowInsecure=true, which this xray-core revision '
+        + 'rejects; the connection will fail to start. Set a certificate fingerprint '
+        + '(pinnedCA256) or verifyPeerCertByName on this server instead.');
+    }
     tls.serverName = XrayConfigBuilder.orNull(sni);
     tls.fingerprint = XrayConfigBuilder.orNull(p.fingerPrint);
     const alpn: string[] = XrayConfigBuilder.csvTrim(p.alpn);
