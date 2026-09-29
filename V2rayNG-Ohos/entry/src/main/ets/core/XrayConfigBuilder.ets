@@ -584,7 +584,94 @@ export class XrayConfigBuilder {
     return JSON.stringify(ob);
   }
 
+  /**
+   * Known ways this pinned xray-core revision refuses a profile, listed before
+   * the config is built so the log explains what to change instead of leaving
+   * only the core's own "config error" behind.
+   *
+   * Behaviour is deliberately NOT changed — the Android builder emits exactly
+   * the same rejected configs (docs/OHOS_PORT.md §6), so silently rewriting the
+   * profile would diverge from upstream. Verified as executable assertions in
+   * scripts/logic_check/out/expected_failures.json.
+   */
+  static coreRejectionReasons(p: ProfileItem): string[] {
+    const out: string[] = [];
+    const net = p.network.toLowerCase();
+
+    // infra/conf/transport_internet.go: case "h2","h3","http" / "quic"
+    if (net === 'h2' || net === 'h3' || net === 'http') {
+      out.push('transport "' + net + '" was removed by this core (migrated to XHTTP); use xhttp or tcp');
+    } else if (net === 'quic') {
+      out.push('transport "quic" was removed by this core (migrated to XHTTP stream-one H3); use xhttp');
+    }
+
+    // infra/conf/xray.go requiresTransportSecurity(): a public server must have
+    // transport security for VLESS (encryption none/empty) and for Trojan.
+    const publicServer = !XrayConfigBuilder.isPrivateAddress(p.server);
+    const noSecurity = p.security.length === 0 || p.security === SecurityType.NONE;
+    if (publicServer && noSecurity) {
+      if (p.configType === EConfigType.VLESS) {
+        out.push('VLESS with security=none is refused for a public address; enable tls or reality on this server');
+      } else if (p.configType === EConfigType.TROJAN) {
+        out.push('Trojan without TLS is refused for a public address; enable tls on this server');
+      }
+    }
+
+    // infra/conf/trojan.go: Flow for Trojan removed
+    if (p.configType === EConfigType.TROJAN && p.flow.length > 0 && p.flow !== 'none') {
+      out.push('Trojan flow was removed by this core; clear the flow field on this server');
+    }
+
+    // infra/conf/transport_security.go: allowInsecure removed
+    if (p.insecure && p.pinnedCA256.trim().length === 0) {
+      out.push('allowInsecure was removed by this core; set a certificate fingerprint '
+        + '(pinnedCA256) or verifyPeerCertByName instead');
+    }
+
+    // infra/conf/transport_method.go: mkcp header & seed removed
+    if ((net === 'kcp' || net === 'mkcp') && p.seed.length > 0) {
+      out.push('kcp seed was removed by this core (migrated to finalmask); clear the seed field');
+    }
+    return out;
+  }
+
+  /** RFC1918 / loopback / link-local / ULA — the addresses the core exempts. */
+  private static isPrivateAddress(host: string): boolean {
+    const h = host.trim().toLowerCase();
+    if (h.length === 0) {
+      return true; // unknown: do not raise a false alarm
+    }
+    if (h.startsWith('fd') || h.startsWith('fc') || h === '::1' || h === 'localhost') {
+      return true;
+    }
+    const parts = h.split('.');
+    if (parts.length !== 4) {
+      return false;
+    }
+    const a = Number.parseInt(parts[0], 10);
+    const b = Number.parseInt(parts[1], 10);
+    if (Number.isNaN(a) || Number.isNaN(b)) {
+      return false;
+    }
+    if (a === 10 || a === 127 || a === 0) {
+      return true;
+    }
+    if (a === 192 && b === 168) {
+      return true;
+    }
+    if (a === 172 && b >= 16 && b <= 31) {
+      return true;
+    }
+    if (a === 169 && b === 254) {
+      return true;
+    }
+    return false;
+  }
+
   private static buildOutbound(profile: ProfileItem): Outbound | undefined {
+    for (const reason of XrayConfigBuilder.coreRejectionReasons(profile)) {
+      Log.w('XrayConfigBuilder: this core will refuse "' + profile.remarks + '": ' + reason);
+    }
     const ob: Outbound = new Outbound();
     ob.tag = TAG_PROXY;
     switch (profile.configType) {
@@ -666,6 +753,16 @@ export class XrayConfigBuilder {
     s.address = XrayConfigBuilder.getServerAddress(p);
     s.port = XrayConfigBuilder.toInt(p.serverPort, 0);
     s.password = p.password;
+    if (p.flow.length > 0) {
+      // The pinned core removed "Flow for Trojan"
+      // (infra/conf/trojan.go: PrintRemovedFeatureError), so emitting a
+      // non-empty flow makes the WHOLE config fail to load and the connection
+      // never starts. CoreOutboundBuilder.kt does exactly the same, so the
+      // behaviour is kept faithful and the consequence is logged instead.
+      Log.w('XrayConfigBuilder: trojan profile ' + p.remarks + ' carries flow="' + p.flow
+        + '", which this xray-core revision rejects; the connection will fail to start. '
+        + 'Clear the flow field on this server.');
+    }
     s.flow = p.flow;
     s.level = DEFAULT_LEVEL;
     ob.protocol = 'trojan';

@@ -151,7 +151,45 @@ const CASES = [
       configType: EConfigType.VLESS, remarks: 'v2rayn demo', server: 'vn.example.com', serverPort: '443',
       method: 'none', network: 'ws', host: 'vn.example.com', path: '/vn', security: 'tls', sni: 'vn.example.com' } },
   { name: '11-custom-json', link: JSON.stringify(CUSTOM_CFG), want: {
-      configType: EConfigType.CUSTOM, server: 'custom.example.com', serverPort: '443' } }
+      configType: EConfigType.CUSTOM, server: 'custom.example.com', serverPort: '443' } },
+
+  // ── transport branches: these are the ones that silently produce a config the
+  //    core refuses, so each is exercised end to end (parsed AND built).
+  { name: '12-vless-tcp-http-header', link: 'vless://b831381d-6324-4d53-ad4f-8cda48b30811@h.example.com:443?encryption=none&security=tls&sni=s.example.com&type=tcp&headerType=http&host=a.com%2Cb.com&path=%2Fp1%2C%2Fp2#tcp-http', want: {
+      configType: EConfigType.VLESS, remarks: 'tcp-http', network: 'tcp', headerType: 'http',
+      host: 'a.com,b.com', path: '/p1,/p2', security: 'tls' } },
+  // Deliberately a PRIVATE address: this core refuses VLESS+security=none for
+  // public addresses (infra/conf/xray.go requiresTransportSecurity), which would
+  // otherwise mask whether the kcp/finalmask path actually builds.
+  { name: '13-vless-kcp-seed', link: 'vless://b831381d-6324-4d53-ad4f-8cda48b30811@192.168.1.10:443?encryption=none&security=none&type=kcp&headerType=none&seed=myseed&mtu=1350&tti=20#kcp', want: {
+      configType: EConfigType.VLESS, remarks: 'kcp', server: '192.168.1.10', network: 'kcp', seed: 'myseed', kcpMtu: 1350, kcpTti: 20 } },
+  { name: '14-vless-ws-earlydata', link: 'vless://b831381d-6324-4d53-ad4f-8cda48b30811@h.example.com:443?encryption=none&security=tls&sni=ws.example.com&type=ws&path=%2Fws%3Fed%3D2048&host=ws.example.com#ws-ed', want: {
+      configType: EConfigType.VLESS, remarks: 'ws-ed', network: 'ws', path: '/ws?ed=2048', host: 'ws.example.com' } },
+  { name: '15-vless-grpc-multi', link: 'vless://b831381d-6324-4d53-ad4f-8cda48b30811@h.example.com:443?encryption=none&security=tls&sni=g.example.com&type=grpc&serviceName=gsvc&authority=gauth&mode=multi#grpc', want: {
+      configType: EConfigType.VLESS, remarks: 'grpc', network: 'grpc', serviceName: 'gsvc', authority: 'gauth', mode: 'multi' } },
+  // type=http maps to the "http" transport, which this core revision REMOVED
+  // (infra/conf/transport_internet.go: `case "h2", "h3", "http":` ->
+  // PrintRemovedFeatureError). Parsing is still covered; the generated config is
+  // asserted to be REJECTED. Android is in the same boat.
+  { name: '16-vless-http-hosts', buildFailReason: 'HTTP transport', link: 'vless://b831381d-6324-4d53-ad4f-8cda48b30811@h.example.com:443?encryption=none&security=tls&sni=h1.com&type=http&host=h1.com%2Ch2.com&path=%2Fr1%2C%2Fr2#h2c', want: {
+      configType: EConfigType.VLESS, remarks: 'h2c', network: 'http', host: 'h1.com,h2.com', path: '/r1,/r2' } },
+  { name: '17-vless-httpupgrade', link: 'vless://b831381d-6324-4d53-ad4f-8cda48b30811@h.example.com:443?encryption=none&security=tls&sni=hu.example.com&type=httpupgrade&host=hu.example.com&path=%2Fhu#hu', want: {
+      configType: EConfigType.VLESS, remarks: 'hu', network: 'httpupgrade', host: 'hu.example.com', path: '/hu' } },
+  { name: '18-vless-xhttp', link: 'vless://b831381d-6324-4d53-ad4f-8cda48b30811@h.example.com:443?encryption=none&security=tls&sni=xh.example.com&type=xhttp&host=xh.example.com&path=%2Fxh&mode=packet-up#xhttp', want: {
+      configType: EConfigType.VLESS, remarks: 'xhttp', network: 'xhttp', host: 'xh.example.com', path: '/xh', xhttpMode: 'packet-up' } },
+  { name: '19-ss-obfs-tls', link: 'ss://' + b64url('aes-128-gcm:pass2') + '@ss2.example.com:8443?plugin=obfs-local%3Bobfs%3Dtls%3Bobfs-host%3Dt.example.com#ss-tls', want: {
+      configType: EConfigType.SHADOWSOCKS, remarks: 'ss-tls', server: 'ss2.example.com', serverPort: '8443',
+      method: 'aes-128-gcm', password: 'pass2',
+      // ShadowsocksFmt only reacts to plugin values containing "obfs=http", so
+      // for obfs=tls the transport fields keep their constructed defaults ('')
+      // — that is upstream's behaviour, and the outbound builder then treats an
+      // empty network as tcp. Do not "fix" this to 'tcp' here without changing
+      // the parser first.
+      network: '', headerType: '', host: '' } },
+  { name: '20-vless-tls-pin', link: 'vless://b831381d-6324-4d53-ad4f-8cda48b30811@h.example.com:443?encryption=none&security=tls&sni=pin.example.com&alpn=h2%2Chttp%2F1.1&fp=chrome&vcn=pin.example.com&pcs=0000000000000000000000000000000000000000000000000000000000000001#tls-pin', want: {
+      configType: EConfigType.VLESS, remarks: 'tls-pin', security: 'tls', sni: 'pin.example.com',
+      alpn: 'h2,http/1.1', fingerPrint: 'chrome', verifyPeerCertByName: 'pin.example.com',
+      pinnedCA256: '0000000000000000000000000000000000000000000000000000000000000001' } }
 ];
 
 // Negative cases: every one of these must parse to null, not to a half-built
@@ -173,7 +211,7 @@ for (const c of CASES) {
   const p = Fmt.parse(c.link);
   truthy(`${c.name}: parses`, p !== null);
   if (p === null) continue;
-  parsed.push({ name: c.name, profile: p });
+  parsed.push({ name: c.name, profile: p, buildFailReason: c.buildFailReason });
   for (const [k, v] of Object.entries(c.want)) {
     eq(`${c.name}.${k}`, p[k], v);
   }
@@ -222,9 +260,14 @@ s.vpnDnsServers = '1.1.1.1,8.8.8.8';
 s.remoteDns = '1.1.1.1';
 s.logLevel = 'warning';
 
-for (const { name, profile } of parsed) {
+const expectedFailures = {};   // filename -> substring the rejection must contain
+for (const { name, profile, buildFailReason } of parsed) {
   emit(`${name}-full.json`, XrayConfigBuilder.buildFor(profile, false));
   emit(`${name}-delaytest.json`, XrayConfigBuilder.buildFor(profile, true));
+  if (buildFailReason) {
+    expectedFailures[`${name}-full.json`] = buildFailReason;
+    expectedFailures[`${name}-delaytest.json`] = buildFailReason;
+  }
   if (profile.configType !== EConfigType.CUSTOM) {
     // Fragments go to their own directory: a bare outbound object parses as an
     // *empty* xray config and would pass the core check while verifying
@@ -269,10 +312,49 @@ delete insecure.outbounds[0].streamSettings.realitySettings;
 insecure.outbounds[0].streamSettings.tlsSettings = { serverName: 'x.example.com', allowInsecure: true };
 emit('91-upstream-allowinsecure.json', JSON.stringify(insecure));
 
-writeFileSync(join(OUT, 'expected_failures.json'), JSON.stringify({
-  '90-upstream-h2.json': 'HTTP transport',
-  '91-upstream-allowinsecure.json': 'allowInsecure'
-}, null, 2));
+// Trojan + flow: CoreOutboundBuilder (and this port) emit settings.flow for
+// trojan unconditionally, but this core revision removed "Flow for Trojan".
+// Same landmine as allowInsecure, on Android too.
+const trojan = parsed.find((p) => p.name === '06-trojan').profile;
+const trojanCfg = JSON.parse(XrayConfigBuilder.buildFor(trojan, false));
+trojanCfg.outbounds[0].settings.flow = 'xtls-rprx-vision';
+emit('92-upstream-trojan-flow.json', JSON.stringify(trojanCfg));
+
+// mkcp header/seed: removed upstream in favour of finalmask; the port never
+// emits them (it uses mkcp-legacy masks), so this fixture proves the old form
+// really is rejected rather than merely "not produced".
+const kcp = parsed.find((p) => p.name === '13-vless-kcp-seed').profile;
+const kcpCfg = JSON.parse(XrayConfigBuilder.buildFor(kcp, false));
+kcpCfg.outbounds[0].streamSettings.kcpSettings = { mtu: 1350, tti: 20, seed: 'myseed' };
+emit('93-upstream-mkcp-seed.json', JSON.stringify(kcpCfg));
+
+expectedFailures['90-upstream-h2.json'] = 'HTTP transport';
+expectedFailures['91-upstream-allowinsecure.json'] = 'allowInsecure';
+expectedFailures['92-upstream-trojan-flow.json'] = 'Flow for Trojan';
+expectedFailures['93-upstream-mkcp-seed.json'] = 'mkcp header & seed';
+
+// VLESS/Trojan without transport security on a public address: this core's
+// requiresTransportSecurity() policy, not a port bug (Android is refused too).
+const noTlsProfile = ProfileItem.create(EConfigType.VLESS);
+noTlsProfile.remarks = 'no-tls';
+noTlsProfile.server = 'public.example.com';
+noTlsProfile.serverPort = '443';
+noTlsProfile.password = 'b831381d-6324-4d53-ad4f-8cda48b30811';
+noTlsProfile.method = 'none';
+noTlsProfile.network = 'tcp';
+noTlsProfile.security = '';
+emit('94-upstream-vless-no-tls.json', XrayConfigBuilder.buildFor(noTlsProfile, false));
+expectedFailures['94-upstream-vless-no-tls.json'] = 'without TLS or other encryption';
+writeFileSync(join(OUT, 'expected_failures.json'), JSON.stringify(expectedFailures, null, 2));
+
+// The tun2socks YAML has no consumer in this Node harness, so its keys are
+// asserted textually — a typo there fails at runtime on the device only.
+const { HevTunConfig } = await import('./dist/harness.mjs');
+const yaml = HevTunConfig.build(0);
+for (const needle of ['tunnel:', 'mtu:', 'socks5:', 'address:', 'port:', 'udp:', 'misc:', 'log-file:', 'log-level:']) {
+  truthy(`hev yaml contains ${needle}`, yaml.includes(needle), yaml);
+}
+truthy('hev yaml socks5 address is loopback', yaml.includes('127.0.0.1'), yaml);
 
 const errors = logRing.all().filter((l) => l.includes(' E '));
 if (errors.length > 0) {

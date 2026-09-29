@@ -235,6 +235,9 @@ export class ConnectionController {
   /** Returns null when the config could not be built (the caller reports it). */
   private static buildRequest(ctx: common.UIAbilityContext, profile: ProfileItem): VpnStartRequest | null {
     const s = settings.get();
+    for (const reason of XrayConfigBuilder.coreRejectionReasons(profile)) {
+      Log.w('ConnectionController: pre-flight — this core will refuse the selected server: ' + reason);
+    }
     const configJson = XrayConfigBuilder.buildFor(profile, false);
     if (configJson.length === 0) {
       Log.e('ConnectionController: config could not be built for ' + profile.remarks);

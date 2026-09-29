@@ -290,12 +290,22 @@ VPN 扩展进程调 cgo 不 SIGSEGV。
 
 | 特性 | 钉版内核行为 | Android 侧是否一样 | 本移植的处理 |
 |---|---|---|---|
-| `h2` / `quic` 传输 | `transport/internet/{http,quic}` 目录**已删除**，解析即报 `has been removed and migrated to XHTTP stream-one H2/H3` | **完全一样**（两个 commit 的目录树逐项一致） | 保留分支（与 Android 一致）。这两个传输的节点在两端都用不了，属于上游行为 |
+| `h2` / `h3` / `http` / `quic` 传输 | `TransportProtocol.Build()` 里 `case "h2","h3","http":` 与 `case "quic":` 直接返回 `PrintRemovedFeatureError`，**硬拒绝** | **完全一样**（`transport/internet/{http,quic}` 目录在两个 commit 里都不存在） | 保留分支（与 Android 一致）。这些传输的节点在两端都用不了，属于上游行为；`ws`/`grpc`/`httpupgrade` 只是**弃用警告**（建议迁 XHTTP），仍可用 |
 | `tlsSettings.allowInsecure` | `if c.AllowInsecure { return PrintRemovedFeatureError(...) }` —— **硬拒绝** | **完全一样** | 与 Android 一致仍会输出（`insecure == true && pinnedCA256 为空`），但**额外打一条 Log.w 说明后果**，避免只看到一个没法定位的 `config error` |
 | kcp 的 `header` / `seed` | `if HeaderConfig != nil \|\| Seed != nil { return PrintRemovedFeatureError("mkcp header & seed", "finalmask/udp header-* & mkcp-original & mkcp-aes128gcm") }` | 一样（新 commit 里这两个字段已从结构体删除） | **已按上游给出的迁移路径实现**：不写 `kcpSettings.header/seed`，改写 `finalmask.udp` 里的 `mkcp-legacy` mask |
-| 全局 `transport` 配置 / `legacy reverse` / Legacy XTLS / Trojan 的 `flow` / `freedom.noise`(单数) | 同样 `PrintRemovedFeatureError` | 一样 | 本移植未产生这些字段 |
+| **VLESS（`security=none`/空）或 Trojan 无 TLS，且服务端是公开地址** | `infra/conf/xray.go` 的 `requiresTransportSecurity()`：公开地址必须带传输加密，否则报 `without TLS or other encryption is prohibited` | **完全一样** | 保留行为。注意"公开"的判定：IP 必须落在私网段，域名必须命中 `private` 域规则；服务端是内网 IP 时反而不受限 |
+| Trojan 的 `flow` | `infra/conf/trojan.go` → `PrintRemovedFeatureError("Flow for Trojan")` | **一样**（上游 `CoreOutboundBuilder.kt:196` 同样无条件发 `settings.flow`） | 保留行为 + 明确告警（曾误写成"本移植未产生该字段"，实际两端都会产生） |
+| 全局 `transport` 配置 / `legacy reverse` / Legacy XTLS / `freedom.noise`(单数) | 同样 `PrintRemovedFeatureError` | 一样 | 本移植未产生这些字段 |
 
-结论：**精鸿蒙版没有因为内核版本落后而少功能**——上面这些限制 Android 版一模一样。
+**上面的每一条都由 `scripts/logic_check` 的可执行断言守着**（见 §4.1）：`expected_failures.json`
+声明"这些文件必须被拒且错误信息含指定理由"，改了内核或改了生成器都会当场变红。
+
+另外 `XrayConfigBuilder.coreRejectionReasons(profile)` 在生成配置前会把这些已知拒绝原因
+**列进日志**（连接前预检，`ConnectionController.start()` 也会打一条），
+所以用户看到的是"该开 tls / 该清 flow / 该换 xhttp"这种可执行提示，
+而不是只有一句 `config error`。行为本身不改——改了就跟上游不一致了。
+
+结论：**纯血鸿蒙版没有因为内核版本落后而少功能**——上面这些限制 Android 版一模一样。
 真正因工具链导致的差距只有一条：内核 revision 比 Android 侧早约 6 周（§2.1）。
 
 还有一个上游地雷值得记住：`allowInsecure` 被移除，但上游自己的
