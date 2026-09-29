@@ -43,6 +43,18 @@ export class AppSettingsData {
   /** bundle names */
   perAppProxySet: string = '';
 
+  /**
+   * Mux (multiplexing). Defaults mirror AppConfig.kt exactly
+   * (PREF_MUX_ENABLED=false, PREF_MUX_CONCURRENCY="8",
+   * PREF_MUX_XUDP_CONCURRENCY="8", PREF_MUX_XUDP_QUIC="reject"), and they stay
+   * strings here because that is how upstream stores them — so a settings blob
+   * exported from the Android build round-trips without conversion.
+   */
+  muxEnabled: boolean = false;
+  muxConcurrency: string = '8';
+  muxXudpConcurrency: string = '8';
+  muxXudpProxyUDP443: string = 'reject';
+
   delayTestUrl: string = 'https://www.gstatic.com/generate_204';
   delayTestTimeoutMs: number = 8000;
   logLevel: string = 'warning';
@@ -102,6 +114,10 @@ class Store {
     if (over.perAppProxyEnabled !== undefined) { out.perAppProxyEnabled = over.perAppProxyEnabled; }
     if (over.perAppProxyBypass !== undefined) { out.perAppProxyBypass = over.perAppProxyBypass; }
     if (over.perAppProxySet !== undefined) { out.perAppProxySet = over.perAppProxySet; }
+    if (over.muxEnabled !== undefined) { out.muxEnabled = over.muxEnabled; }
+    if (over.muxConcurrency !== undefined) { out.muxConcurrency = over.muxConcurrency; }
+    if (over.muxXudpConcurrency !== undefined) { out.muxXudpConcurrency = over.muxXudpConcurrency; }
+    if (over.muxXudpProxyUDP443 !== undefined) { out.muxXudpProxyUDP443 = over.muxXudpProxyUDP443; }
     if (over.delayTestUrl !== undefined) { out.delayTestUrl = over.delayTestUrl; }
     if (over.delayTestTimeoutMs !== undefined) { out.delayTestTimeoutMs = over.delayTestTimeoutMs; }
     if (over.logLevel !== undefined) { out.logLevel = over.logLevel; }

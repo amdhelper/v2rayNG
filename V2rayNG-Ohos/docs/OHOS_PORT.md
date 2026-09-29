@@ -317,6 +317,19 @@ VPN 扩展进程调 cgo 不 SIGSEGV。
   之前那句"应用选择器尚未实现，开关会保存但暂不生效"——它既没说清平台原因，
   而且在用户真填了包名之后**这句话还是错的**。
 
+**Mux（分流复用）：可配了，默认行为与安卓一致**
+- 四个 AppConfig 键（`PREF_MUX_ENABLED` / `PREF_MUX_CONCURRENCY` /
+  `PREF_MUX_XUDP_CONCURRENCY` / `PREF_MUX_XUDP_QUIC`）已接进设置页。
+  默认值逐字对齐上游（`false` / `"8"` / `"8"` / `"reject"`），所以出厂状态与安卓版
+  **完全一样**（Mux 关闭）；差别只是用户现在能开。
+- 上游那些"强制关 Mux"的规则照旧生效（socks / ss / http / trojan / wireguard /
+  hysteria 与 XHTTP 传输一律关；带 flow 的 VLESS 并发被压成 -1），门禁里有断言：
+  设置项再怎么改都压不过这些规则。
+- 值在设置里存成**字符串**（跟上游 MMKV 的类型一致），解析失败一律回退到默认值——
+  `concurrency: NaN` 会让整个出站被内核拒掉，这属于"一定要挡在生成期"的错。
+- 一并说明：设置页原先根本没暴露 Mux，而 `XrayConfigBuilder` 里是硬编码常量；
+  注释里写着"AppSettingsData 没有这些字段"，现在补上了。
+
 **其他**
 - 订阅 URL 拉取用明文 http 客户端（与 Android 一致），未加计量/重试策略。
 - 开机自启、常驻通知、快捷开关（Android 的 QSTile/Widget/Tasker）未移植。

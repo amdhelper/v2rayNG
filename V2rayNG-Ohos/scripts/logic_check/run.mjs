@@ -300,6 +300,51 @@ s.routingPreset = 'bypass-mainland';
 s.routingEnabled = true;
 s.fakeDnsEnabled = false;
 
+// ── mux ───────────────────────────────────────────────────────────────────
+// The app now exposes the four AppConfig mux keys, so their effect on the
+// generated config has to be pinned: mux off must stay off (that is the stock
+// default and what most users run), garbage in the store must not become NaN
+// (the core rejects the whole outbound), and the protocol/flow rules must
+// survive whatever the user sets.
+const muxOf = (profile) => JSON.parse(XrayConfigBuilder.buildFor(profile, false)).outbounds[0].mux;
+const van = parsed.find((p) => p.name === '03-vless-reality').profile;
+const flowless = parsed.find((p) => p.name === '12-vless-tcp-http-header').profile;
+
+s.muxEnabled = false;
+eq('mux off -> concurrency -1 (xray reads <0 as disabled)', muxOf(van).concurrency, -1);
+eq('mux off -> enabled false', muxOf(van).enabled, false);
+
+s.muxEnabled = true;
+s.muxConcurrency = '16';
+s.muxXudpConcurrency = '32';
+s.muxXudpProxyUDP443 = 'allow';
+const on = muxOf(flowless);
+eq('mux on -> enabled', on.enabled, true);
+eq('mux on -> concurrency from settings', on.concurrency, 16);
+eq('mux on -> xudpConcurrency from settings', on.xudpConcurrency, 32);
+eq('mux on -> xudpProxyUDP443 from settings', on.xudpProxyUDP443, 'allow');
+
+// vless WITH flow: upstream forces concurrency -1 regardless of the setting.
+eq('mux on + flow -> forced -1', muxOf(van).concurrency, -1);
+
+s.muxConcurrency = 'not-a-number';
+eq('mux: unparseable concurrency falls back, never NaN',
+  muxOf(flowless).concurrency, 8);
+s.muxConcurrency = '';
+eq('mux: empty concurrency falls back', muxOf(flowless).concurrency, 8);
+
+// Protocols that must never mux, even with the setting on.
+s.muxConcurrency = '8';
+s.muxXudpConcurrency = '8';
+const socksy = ProfileItem.create(EConfigType.SOCKS);
+socksy.remarks = 'mux-socks';
+socksy.server = '192.168.1.10';
+socksy.serverPort = '1080';
+eq('mux on + socks -> disabled', muxOf(socksy).concurrency, -1);
+
+s.muxEnabled = false;
+s.muxXudpProxyUDP443 = 'reject';
+
 // Deliberate upstream-removed fixtures. The Go checker asserts these FAIL with
 // the documented reason, so docs/OHOS_PORT.md §6 is enforced, not just claimed.
 const h2 = JSON.parse(XrayConfigBuilder.buildFor(vless, false));

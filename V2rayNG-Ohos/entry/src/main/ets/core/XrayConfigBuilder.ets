@@ -953,17 +953,15 @@ export class XrayConfigBuilder {
 
   private static applyGlobalOutboundSettings(ob: Outbound): void {
     const mux: Mux = new Mux();
-    // AppSettingsData has no muxEnabled/muxConcurrency/xudpConcurrency/
-    // xudpProxyUDP443 field, so the AppConfig defaults are used verbatim:
-    // PREF_MUX_ENABLED=false, PREF_MUX_CONCURRENCY="8",
-    // DEFAULT_MUX_XUDP_CONCURRENCY="8", PREF_MUX_XUDP_QUIC="reject".
-    // Mux stays off, exactly as it is on a stock Android install.
-    const MUX_ENABLED: boolean = false;
-    const MUX_CONCURRENCY: number = 8;
-    const MUX_XUDP_CONCURRENCY: number = 8;
-    const MUX_XUDP_QUIC: string = 'reject';
+    // Values come from settings, whose defaults mirror AppConfig.kt exactly
+    // (PREF_MUX_ENABLED=false, concurrency "8"/"8", xudp QUIC "reject"), so a
+    // stock install behaves identically to the Android build. Read from the
+    // store rather than a parameter because the caller (buildOutbound) has no
+    // AppSettingsData — same as upstream's updateOutboundWithGlobalSettings,
+    // which also reaches for MmkvManager directly.
+    const cfg: AppSettingsData = settings.get();
 
-    let muxEnabled: boolean = MUX_ENABLED;
+    let muxEnabled: boolean = cfg.muxEnabled;
     const protocol: string = (ob.protocol ?? '').toLowerCase();
     if (protocol === 'shadowsocks' || protocol === 'socks' || protocol === 'http' ||
       protocol === 'trojan' || protocol === 'wireguard' || protocol === 'hysteria') {
@@ -974,9 +972,11 @@ export class XrayConfigBuilder {
 
     if (muxEnabled) {
       mux.enabled = true;
-      mux.concurrency = MUX_CONCURRENCY;
-      mux.xudpConcurrency = MUX_XUDP_CONCURRENCY;
-      mux.xudpProxyUDP443 = MUX_XUDP_QUIC;
+      // Upstream stores these as strings (decodeSettingsString(...).toInt()), so
+      // garbage in the store must not become NaN in the config: toInt falls back.
+      mux.concurrency = XrayConfigBuilder.toInt(cfg.muxConcurrency, 8);
+      mux.xudpConcurrency = XrayConfigBuilder.toInt(cfg.muxXudpConcurrency, 8);
+      mux.xudpProxyUDP443 = cfg.muxXudpProxyUDP443.length > 0 ? cfg.muxXudpProxyUDP443 : 'reject';
       if (protocol === 'vless') {
         const s: OutSettings | undefined = ob.settings as OutSettings | undefined;
         if (s !== undefined && s.flow !== undefined && s.flow.length > 0) {

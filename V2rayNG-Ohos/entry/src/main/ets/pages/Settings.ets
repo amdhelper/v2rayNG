@@ -38,6 +38,10 @@ const ROUTING_PRESET_LABELS: string[] = [
 const LOG_LEVELS: string[] = ['verbose', 'info', 'warning', 'error', 'none'];
 const LOG_LEVEL_LABELS: string[] = ['详细 (verbose)', '信息 (info)', '警告 (warning)', '错误 (error)', '关闭 (none)'];
 
+/** 与 AppConfig.PREF_MUX_XUDP_QUIC 的取值域一致。 */
+const MUX_XUDP_QUIC: string[] = ['reject', 'allow', 'skip'];
+const MUX_XUDP_QUIC_LABELS: string[] = ['拒绝 (reject)', '允许 (allow)', '跳过 (skip)'];
+
 const DOMAIN_STRATEGIES: string[] = ['AsIs', 'IPIfNonMatch', 'IPOnDemand'];
 const DOMAIN_STRATEGY_LABELS: string[] = ['原样 (AsIs)', '非匹配时用 IP', '按需用 IP'];
 
@@ -53,6 +57,7 @@ function toSelectOptions(values: string[]): SelectOption[] {
 const ROUTING_SELECT: SelectOption[] = toSelectOptions(ROUTING_PRESETS);
 const LOG_LEVEL_SELECT: SelectOption[] = toSelectOptions(LOG_LEVELS);
 const STRATEGY_SELECT: SelectOption[] = toSelectOptions(DOMAIN_STRATEGIES);
+const MUX_QUIC_SELECT: SelectOption[] = toSelectOptions(MUX_XUDP_QUIC);
 
 /** 把 0..n-1 的下标映射到标签数组，越界时返回原值。 */
 function labelOf(labels: string[], index: number, fallback: string): string {
@@ -97,6 +102,10 @@ struct Settings {
   @State perAppProxySet: string = '';
   /** 名单里每个包名的核验结果，供下面逐行标注。 */
   @State bundleChecks: BundleCheck[] = [];
+  @State muxEnabled: boolean = false;
+  @State muxConcurrency: string = '8';
+  @State muxXudpConcurrency: string = '8';
+  @State muxXudpProxyUDP443: string = 'reject';
   @State delayTestUrl: string = '';
   @State delayTestTimeoutMs: number = 8000;
   @State logLevel: string = 'warning';
@@ -122,6 +131,10 @@ struct Settings {
     this.perAppProxyEnabled = d.perAppProxyEnabled;
     this.perAppProxyBypass = d.perAppProxyBypass;
     this.perAppProxySet = d.perAppProxySet;
+    this.muxEnabled = d.muxEnabled;
+    this.muxConcurrency = d.muxConcurrency;
+    this.muxXudpConcurrency = d.muxXudpConcurrency;
+    this.muxXudpProxyUDP443 = d.muxXudpProxyUDP443;
     this.refreshBundleChecks();
     this.delayTestUrl = d.delayTestUrl;
     this.delayTestTimeoutMs = d.delayTestTimeoutMs;
@@ -534,6 +547,42 @@ struct Settings {
           + '没有 getAllBundleInfo），所以安卓版那种“勾选应用”的选择器在这里做不到：'
           + '只能填包名。包名可在“设置 → 应用 → 应用详情”或用 '
           + 'hdc shell bm dump -a 查到。名单在下次连接时生效，未核验通过的包名会被隧道忽略。')
+          .fontSize(12)
+          .fontColor(C_TEXT2)
+          .width('100%')
+          .margin({ top: 4, bottom: 8 })
+
+        // --- Mux ---
+        this.Card('Mux（分流复用）', '默认关闭，与安卓版出厂设置一致')
+        this.SwitchRow('启用 Mux', '把多条连接复用进一条；部分服务端/协议会因此异常，'
+          + 'socks/trojan/ss/http/wireguard/hysteria 与 XHTTP 传输仍会自动禁用', this.muxEnabled,
+          (v: boolean) => {
+            this.muxEnabled = v;
+            this.commit((d: AppSettingsData) => {
+              d.muxEnabled = v;
+            });
+          })
+        this.TextRow('并发数 (concurrency)', this.muxConcurrency, '8', (v: string) => {
+          this.muxConcurrency = v;
+          this.commit((d: AppSettingsData) => {
+            d.muxConcurrency = v;
+          });
+        })
+        this.TextRow('XUDP 并发数', this.muxXudpConcurrency, '8', (v: string) => {
+          this.muxXudpConcurrency = v;
+          this.commit((d: AppSettingsData) => {
+            d.muxXudpConcurrency = v;
+          });
+        })
+        this.PickerRow('XUDP 走 UDP/443 时', MUX_QUIC_SELECT, this.muxXudpProxyUDP443,
+          MUX_XUDP_QUIC, MUX_XUDP_QUIC_LABELS, (v: string) => {
+            this.muxXudpProxyUDP443 = v;
+            this.commit((d: AppSettingsData) => {
+              d.muxXudpProxyUDP443 = v;
+            });
+          })
+        Text('注：带 flow（如 xtls-rprx-vision）的 VLESS 节点，Mux 并发会被强制设为 -1，'
+          + '即该节点上 Mux 等于关闭——这是上游 CoreOutboundBuilder 的行为。')
           .fontSize(12)
           .fontColor(C_TEXT2)
           .width('100%')
